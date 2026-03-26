@@ -1,0 +1,52 @@
+site_name: Hearth Documentation
+site_description: The official, searchable documentation for Hearth.
+theme:
+  name: material
+  features:
+    - search.suggest
+    - search.highlight
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: installation.md
+    - Configuration: configuration.md
+    - Account Setup: account_setup.md
+  - Fundamentals:
+    - Accounting Terms: accounting_terms.md
+    - Households: households.md
+  - Core Usage:
+    - Managing Transactions & Accounts: managing_transactions.md
+    - Dashboard & Analytics: dashboard_analytics.md
+  - Advanced Features:
+    - Rules & Automation: rules.md
+    - Bank Feeds: bank_feeds.md
+    - Budgets: budgets.md
+    - Receipts & OCR: receipts.md
+  - Development:
+    - API Reference: api.md
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed

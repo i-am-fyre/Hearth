@@ -1,0 +1,43 @@
+# Environment & Secrets
+.env
+*.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.venv/
+venv/
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.svelte-kit/
+
+# Logs
+*.log
+frontend/frontend.log
+
+# MkDocs build output
+site/
+mkdocs.log
+
+# User uploaded receipt files (encrypted)
+backend/storage/
+
+# Dev/test scratch files
+samples/
+*.tmp
+
+# AI / Antigravity artifacts (redundant safety)
+.gemini/
+
+# OS
+.DS_Store
+Thumbs.db
