@@ -141,4 +141,4 @@ This project was built with the assistance of **[Google Antigravity](https://dee
 
 ## 📄 License
 
-MIT License — see [LICENSE](LICENSE) for details.
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)** — see the [LICENSE](LICENSE) file for details.
