@@ -8,7 +8,7 @@ class Receipt(Base):
     __tablename__ = "receipts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    transaction_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("transactions.id"), nullable=True, index=True)
+    transaction_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("transactions.id", use_alter=True, name="fk_receipt_transaction_id"), nullable=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     
     file_path: Mapped[str] = mapped_column(String, nullable=False)
