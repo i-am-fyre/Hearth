@@ -20,3 +20,10 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+
+class UserForgotPassword(BaseModel):
+    email: EmailStr
+    
+class UserResetPassword(BaseModel):
+    token: str
+    new_password: str

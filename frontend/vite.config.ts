@@ -6,5 +6,8 @@ export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	ssr: {
 		noExternal: ['chart.js']
+	},
+	server: {
+		host: '0.0.0.0'
 	}
 });

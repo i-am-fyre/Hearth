@@ -42,3 +42,33 @@ async def send_invite_email(email_to: EmailStr, household_name: str, inviter_ema
         await fm.send_message(message)
     except Exception as e:
         logger.error(f"Failed to send email: {e}")
+
+async def send_password_reset_email(email_to: EmailStr, token: str):
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        logger.warning(f"SMTP not configured. Skipping password reset email to {email_to}")
+        return
+        
+    reset_link = f"{settings.FRONTEND_URL}/login/reset?token={token}"
+    html = f"""
+    <h3>Password Reset Request</h3>
+    <p>We received a request to reset the password for your Hearth account.</p>
+    <p>If you made this request, click the button below to choose a new password. This link is only valid for 1 hour.</p>
+    <br>
+    <p><a href="{reset_link}" style="display: inline-block; padding: 10px 20px; background-color: #3b82f6; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Reset Password</a></p>
+    <br>
+    <p><small>If you did not request a password reset, you can safely ignore this email.</small></p>
+    <p><small>If the button doesn't work, copy and paste this link: {reset_link}</small></p>
+    """
+    
+    message = MessageSchema(
+        subject="Hearth Password Reset",
+        recipients=[email_to],
+        body=html,
+        subtype=MessageType.html
+    )
+
+    fm = FastMail(get_mail_config())
+    try:
+        await fm.send_message(message)
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
