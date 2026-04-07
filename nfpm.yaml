@@ -1,0 +1,34 @@
+name: "hearth"
+arch: "amd64"
+platform: "linux"
+version: "${VERSION}"
+section: "default"
+priority: "extra"
+maintainer: "i-am-fyre <support@hearth.app>"
+description: "Hearth - Modern Personal Finance Manager"
+vendor: "i-am-fyre"
+homepage: "https://github.com/i-am-fyre/Hearth"
+license: "MIT"
+
+contents:
+  - src: "backend/dist/hearth"
+    dst: "/usr/bin/hearth"
+  - src: "frontend/build/**"
+    dst: "/usr/share/hearth/frontend"
+  - src: "hearth.service"
+    dst: "/lib/systemd/system/hearth.service"
+  - src: "hearth.conf"
+    dst: "/etc/hearth/hearth.conf"
+    type: "config"
+
+scripts:
+  postinstall: "scripts/postinstall.sh"
+  preremove: "scripts/preremove.sh"
+
+overrides:
+  deb:
+    depends:
+      - postgresql
+      - ca-certificates
+    recommends:
+      - nginx

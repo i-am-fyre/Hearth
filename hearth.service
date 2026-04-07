@@ -1,0 +1,16 @@
+[Unit]
+Description=Hearth - Modern Personal Finance Manager
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=hearth
+Group=hearth
+WorkingDirectory=/var/lib/hearth
+EnvironmentFile=/etc/hearth/hearth.conf
+ExecStart=/usr/bin/hearth
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

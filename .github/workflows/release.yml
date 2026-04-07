@@ -22,6 +22,44 @@ jobs:
           VERSION=$(cat VERSION | xargs)
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './frontend/package-lock.json'
+
+      - name: Build Frontend
+        working-directory: ./frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: './backend/requirements.txt'
+
+      - name: Build Backend
+        working-directory: ./backend
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+          pyinstaller --onefile --name hearth bundle.py
+
+      - name: Setup NFPM
+        uses: goreleaser/nfpm-action@v2
+
+      - name: Build Debian Package
+        env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+        run: |
+          # Remove 'v' from version for Debian consistency if needed
+          CLEAN_VERSION=$(echo $VERSION | sed 's/^v//')
+          VERSION=$CLEAN_VERSION nfpm pkg --target hearth_${CLEAN_VERSION}_amd64.deb
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -30,5 +68,7 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
+          files: |
+             hearth_*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,28 @@
+import uvicorn
+from app.main import app
+import os
+import sys
+
+# Ensure we are in the correct directory for relative paths
+if getattr(sys, 'frozen', False):
+    os.chdir(sys._MEIPASS)
+
+# Production Frontend Hosting
+# If installed via .deb, the frontend is in /usr/share/hearth/frontend
+FRONTEND_PATH = "/usr/share/hearth/frontend"
+if os.path.exists(FRONTEND_PATH):
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse
+    
+    app.mount("/", StaticFiles(directory=FRONTEND_PATH, html=True), name="static")
+    
+    @app.exception_handler(404)
+    async def spa_fallback(request, exc):
+        return FileResponse(os.path.join(FRONTEND_PATH, "index.html"))
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    host = os.environ.get("HOST", "0.0.0.0")
+    
+    print(f"Starting Hearth on {host}:{port}...")
+    uvicorn.run(app, host=host, port=port, log_level="info")
