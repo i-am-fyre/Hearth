@@ -53,7 +53,7 @@ def update_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found or not in your household")
     
     transaction = transaction_service.update_transaction(
-        db=db, db_txn=db_txn, transaction_in=transaction_in
+        db=db, db_txn=db_txn, transaction_in=transaction_in, user_id=current_user.id
     )
     return transaction
 

@@ -16,6 +16,7 @@ class Transaction(Base):
 
     user: Mapped["User"] = relationship(back_populates="transactions")
     entries: Mapped[list["Entry"]] = relationship(back_populates="transaction", cascade="all, delete-orphan")
+    tags: Mapped[list["Tag"]] = relationship(secondary="transaction_tags", back_populates="transactions")
 
 class Entry(Base):
     __tablename__ = "entries"
@@ -29,3 +30,4 @@ class Entry(Base):
 
     transaction: Mapped["Transaction"] = relationship(back_populates="entries")
     account: Mapped["Account"] = relationship(back_populates="entries")
+    tags: Mapped[list["Tag"]] = relationship(secondary="entry_tags", back_populates="entries")

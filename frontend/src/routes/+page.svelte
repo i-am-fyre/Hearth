@@ -48,11 +48,18 @@
     };
   }
 
+  interface AppTag {
+    id: number;
+    name: string;
+    color_hex: string;
+  }
+
   interface Entry {
     account_id: number;
     debit: number;
     credit: number;
     description?: string | null;
+    tags: AppTag[];
   }
 
   interface Transaction {
@@ -60,6 +67,7 @@
     date: string;
     description: string;
     entries: Entry[];
+    tags: AppTag[];
     receipt_id?: number | null;
   }
 
@@ -73,6 +81,7 @@
 
   let transactions = $state<Transaction[]>([]);
   let accounts = $state<Account[]>([]);
+  let tags = $state<AppTag[]>([]);
   let budgets = $state<any[]>([]);
   let rules = $state<any[]>([]);
   let budgetVariances = $state<Record<number, any>>({});
@@ -124,6 +133,8 @@
   let customEndDate = $state("");
   let pendingReceipt = $state<any>(null);
   let receiptImageUrl = $state<string | null>(null);
+  let verifyTagIds = $state<number[]>([]);
+  let verifyCascade = $state(false);
 
   function getDateRange(preset: string) {
     const now = new Date();
@@ -501,7 +512,7 @@
   }
 
   function addItem() {
-    verifyItems = [...verifyItems, { name: "", price: 0 }];
+    verifyItems = [...verifyItems, { name: "", price: 0, tag_ids: [] }];
   }
 
   function removeItem(index: number) {
@@ -582,8 +593,12 @@
       verifyTotal = Number(parsed.total) || 0;
       verifyItems = (parsed.items || []).map((item: any) => ({
         name: item.name,
-        price: Number(item.price) || 0
+        price: Number(item.price) || 0,
+        tag_ids: []
       }));
+      
+      verifyTagIds = [];
+      verifyCascade = false;
       
       await fetchReceiptImage(receipt.id);
       
@@ -614,12 +629,13 @@
   async function refreshData() {
     loading = true;
     try {
-      const [txnsData, accountsData, hhData, budgetsData, rulesData] = await Promise.all([
+      const [txnsData, accountsData, hhData, budgetsData, rulesData, resTags] = await Promise.all([
         api.get("/transactions/"),
         api.get("/accounts/"),
         api.get("/households/"),
         api.get("/budgets/"),
         api.get("/rules/"),
+        api.get("/tags/"),
       ]);
       
       const unmatchedRes = await api.get("/imports/unmatched");
@@ -629,6 +645,7 @@
       accounts = accountsData;
       household = hhData;
       currentUser = session.user;
+      tags = resTags;
       budgets = budgetsData;
       rules = rulesData;
 
@@ -760,7 +777,8 @@
             account_id: verifyToAccountId,
             debit: Number(item.price),
             credit: 0,
-            description: item.name // Item name description
+            description: item.name, // Item name description
+            tag_ids: verifyCascade ? verifyTagIds : (item.tag_ids || [])
           });
         });
         
@@ -771,7 +789,8 @@
             account_id: verifyToAccountId,
             debit: Number((verifyTotal - itemsSum).toFixed(2)),
             credit: 0,
-            description: "Uncategorized Adjustments"
+            description: "Uncategorized Adjustments",
+            tag_ids: verifyCascade ? verifyTagIds : []
           });
         }
       } else {
@@ -780,7 +799,8 @@
           account_id: verifyToAccountId,
           debit: verifyTotal,
           credit: 0,
-          description: verifyMerchant || "Direct Purchase"
+          description: verifyMerchant || "Direct Purchase",
+          tag_ids: verifyTagIds
         });
       }
 
@@ -789,28 +809,29 @@
         account_id: verifyFromAccountId,
         debit: 0,
         credit: verifyTotal,
-        description: verifyMerchant || "Payment"
+        description: verifyMerchant || "Payment",
+        tag_ids: verifyCascade ? verifyTagIds : []
       });
+
+      const transactionPayload: any = {
+        date: verifyDate,
+        description: verifyMerchant,
+        tag_ids: verifyTagIds,
+        cascade_tags_to_entries: verifyCascade,
+        entries: entries,
+      };
 
       if (isUpdatingMatch && matchTransactionId) {
         // PATCH existing transaction
-        await api.patch(`/transactions/${matchTransactionId}`, {
-          date: verifyDate,
-          description: verifyMerchant,
-          entries: entries
-        });
+        await api.patch(`/transactions/${matchTransactionId}`, transactionPayload);
         // Link receipt
         await api.patch(`/receipts/${pendingReceipt.id}/attach`, {
           transaction_id: matchTransactionId
         });
       } else {
         // POST new transaction
-        await api.post("/transactions/", {
-          date: verifyDate,
-          description: verifyMerchant,
-          receipt_id: pendingReceipt.id,
-          entries: entries,
-        });
+        transactionPayload.receipt_id = pendingReceipt.id;
+        await api.post("/transactions/", transactionPayload);
       }
 
       if (receiptImageUrl) {
@@ -882,7 +903,12 @@
     editTransactionData = {
       description: selectedTransaction.description,
       date: selectedTransaction.date,
-      entries: selectedTransaction.entries.map((e: any) => ({ ...e })),
+      tag_ids: selectedTransaction.tags?.map((t: any) => t.id) || [],
+      cascade_tags_to_entries: false,
+      entries: selectedTransaction.entries.map((e: any) => ({ 
+        ...e, 
+        tag_ids: e.tags?.map((t: any) => t.id) || [] 
+      })),
     };
   }
 
@@ -942,7 +968,7 @@
   function addEditEntry() {
     editTransactionData.entries = [
       ...editTransactionData.entries,
-      { account_id: 0, debit: 0, credit: 0 },
+      { account_id: 0, debit: 0, credit: 0, tag_ids: [] },
     ];
   }
 
@@ -1900,6 +1926,42 @@
                 </div>
               </div>
 
+              <div class="space-y-3">
+                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Transaction Tags</label>
+                <div class="flex flex-wrap gap-2 p-4 bg-slate-800 border border-slate-700 rounded-2xl">
+                  {#each tags as tag}
+                    <button
+                      type="button"
+                      onclick={() => {
+                        if (verifyTagIds.includes(tag.id)) {
+                          verifyTagIds = verifyTagIds.filter(id => id !== tag.id);
+                        } else {
+                          verifyTagIds = [...verifyTagIds, tag.id];
+                        }
+                      }}
+                      class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all"
+                      style="
+                        background-color: {verifyTagIds.includes(tag.id) ? tag.color_hex + '30' : 'transparent'};
+                        color: {verifyTagIds.includes(tag.id) ? tag.color_hex : '#64748b'};
+                        border-color: {verifyTagIds.includes(tag.id) ? tag.color_hex + '60' : '#334155'};
+                      "
+                    >
+                      {tag.name}
+                    </button>
+                  {/each}
+                </div>
+                {#if verifyTagIds.length > 0}
+                  <label class="flex items-center gap-2 cursor-pointer group px-1">
+                    <input 
+                      type="checkbox" 
+                      bind:checked={verifyCascade}
+                      class="w-3 h-3 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500 transition-all"
+                    />
+                    <span class="text-[10px] font-bold text-slate-500 uppercase group-hover:text-slate-400 transition-colors">Apply these tags to all line items</span>
+                  </label>
+                {/if}
+              </div>
+
               <!-- Line Items -->
               <div class="space-y-4">
                 <div class="flex justify-between items-center">
@@ -1954,6 +2016,30 @@
                         >
                       </button>
                     </div>
+                    {#if !verifyCascade}
+                      <div class="flex flex-wrap gap-1.5 pl-1 mb-2">
+                        {#each tags as tag}
+                          <button
+                            type="button"
+                            onclick={() => {
+                              if (item.tag_ids.includes(tag.id)) {
+                                item.tag_ids = item.tag_ids.filter(id => id !== tag.id);
+                              } else {
+                                item.tag_ids = [...item.tag_ids, tag.id];
+                              }
+                            }}
+                            class="px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border transition-all"
+                            style="
+                              background-color: {item.tag_ids.includes(tag.id) ? tag.color_hex + '25' : 'transparent'};
+                              color: {item.tag_ids.includes(tag.id) ? tag.color_hex : '#475569'};
+                              border-color: {item.tag_ids.includes(tag.id) ? tag.color_hex + '50' : '#1e293b'};
+                            "
+                          >
+                            {tag.name}
+                          </button>
+                        {/each}
+                      </div>
+                    {/if}
                   {/each}
                   {#if verifyItems.length === 0}
                     <div
@@ -2340,6 +2426,18 @@
                         {/if}
                       </div>
                     </div>
+                    {#if entry.tags && entry.tags.length > 0}
+                      <div class="flex flex-wrap gap-1 mt-2">
+                        {#each entry.tags as tag}
+                          <span 
+                            class="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border"
+                            style="background-color: {tag.color_hex}15; color: {tag.color_hex}; border-color: {tag.color_hex}30"
+                          >
+                            {tag.name}
+                          </span>
+                        {/each}
+                      </div>
+                    {/if}
                     {#if !entry.description}
                       <div class="text-[10px] text-slate-600 uppercase mt-1">
                         {accounts.find((a) => a.id === entry.account_id)?.type || "Account"}
@@ -2360,6 +2458,18 @@
                     >{selectedTransaction.description}</span
                   >
                 </div>
+                {#if selectedTransaction.tags && selectedTransaction.tags.length > 0}
+                  <div class="flex flex-wrap gap-1 mt-3 pt-3 border-t border-blue-500/10">
+                    {#each selectedTransaction.tags as tag}
+                      <span 
+                        class="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border"
+                        style="background-color: {tag.color_hex}20; color: {tag.color_hex}; border-color: {tag.color_hex}40"
+                      >
+                        {tag.name}
+                      </span>
+                    {/each}
+                  </div>
+                {/if}
               </div>
             {:else}
               <div class="space-y-6">
@@ -2390,6 +2500,45 @@
                       class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
+                </div>
+
+                <div class="space-y-3">
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">Transaction Tags</label>
+                  <div class="flex flex-wrap gap-2 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
+                    {#each tags as tag}
+                      <button
+                        type="button"
+                        onclick={() => {
+                          if (editTransactionData.tag_ids.includes(tag.id)) {
+                            editTransactionData.tag_ids = editTransactionData.tag_ids.filter(id => id !== tag.id);
+                          } else {
+                            editTransactionData.tag_ids = [...editTransactionData.tag_ids, tag.id];
+                          }
+                        }}
+                        class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all"
+                        style="
+                          background-color: {editTransactionData.tag_ids.includes(tag.id) ? tag.color_hex + '30' : 'transparent'};
+                          color: {editTransactionData.tag_ids.includes(tag.id) ? tag.color_hex : '#64748b'};
+                          border-color: {editTransactionData.tag_ids.includes(tag.id) ? tag.color_hex + '60' : '#334155'};
+                        "
+                      >
+                        {tag.name}
+                      </button>
+                    {/each}
+                    {#if tags.length === 0}
+                      <a href="/tags" class="text-[10px] text-slate-600 italic hover:text-blue-400 transition-colors underline">Create your first tag here...</a>
+                    {/if}
+                  </div>
+                  {#if editTransactionData.tag_ids.length > 0}
+                    <label class="flex items-center gap-2 cursor-pointer group">
+                      <input 
+                        type="checkbox" 
+                        bind:checked={editTransactionData.cascade_tags_to_entries}
+                        class="w-3 h-3 rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-blue-500 transition-all"
+                      />
+                      <span class="text-[10px] font-bold text-slate-500 uppercase group-hover:text-slate-400 transition-colors">Apply these tags to all line items</span>
+                    </label>
+                  {/if}
                 </div>
 
                 <div>
@@ -2434,9 +2583,17 @@
                               {/each}
                             </select>
                           </div>
+                          <div class="flex-[2]">
+                            <input
+                              type="text"
+                              bind:value={entry.description}
+                              placeholder="Item description (optional)..."
+                              class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs outline-none focus:border-blue-500 text-slate-300"
+                            />
+                          </div>
                           <button
                             onclick={() => removeEditEntry(i)}
-                            class="text-slate-600 hover:text-red-400 trasition-colors"
+                            class="text-slate-600 hover:text-red-400 transitions-colors"
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -2477,6 +2634,41 @@
                             />
                           </div>
                         </div>
+
+                        {#if !editTransactionData.cascade_tags_to_entries}
+                          <div class="space-y-2">
+                             <label class="block text-[8px] font-bold text-slate-600 uppercase tracking-widest pl-1">Item Tags</label>
+                             <div class="flex flex-wrap gap-1.5 min-h-6">
+                                {#each tags as tag}
+                                  <button
+                                    type="button"
+                                    onclick={() => {
+                                      if (entry.tag_ids.includes(tag.id)) {
+                                        entry.tag_ids = entry.tag_ids.filter(id => id !== tag.id);
+                                      } else {
+                                        entry.tag_ids = [...entry.tag_ids, tag.id];
+                                      }
+                                    }}
+                                    class="px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border transition-all"
+                                    style="
+                                      background-color: {entry.tag_ids.includes(tag.id) ? tag.color_hex + '25' : 'transparent'};
+                                      color: {entry.tag_ids.includes(tag.id) ? tag.color_hex : '#475569'};
+                                      border-color: {entry.tag_ids.includes(tag.id) ? tag.color_hex + '50' : '#1e293b'};
+                                    "
+                                  >
+                                    {tag.name}
+                                  </button>
+                                {/each}
+                                {#if tags.length === 0}
+                                  <a href="/tags" class="text-[8px] text-slate-600 italic hover:text-blue-400 transition-colors underline">Create your first tag here...</a>
+                                {/if}
+                             </div>
+                          </div>
+                        {:else}
+                          <div class="text-[8px] font-bold text-blue-500/50 uppercase tracking-widest pl-1 italic">
+                            Parent tags will be cascaded on save
+                          </div>
+                        {/if}
                       </div>
                     {/each}
                   </div>
@@ -2730,9 +2922,21 @@
                         stroke-linecap="round"
                         stroke-linejoin="round"
                         stroke-width="2"
-                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                        d="M15.172 7l-6.586 6.586a2 2 0 1 0 2.828 2.828l6.414-6.586a4 4 0 0 0 -5.656-5.656l-6.415 6.585a6 6 0 1 0 8.486 8.486L20.5 13"
                       /></svg
                     >
+                  {/if}
+                  {#if txn.tags && txn.tags.length > 0}
+                    <div class="flex flex-wrap gap-1 mt-1.5 font-sans">
+                      {#each txn.tags as tag}
+                        <span 
+                          class="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider h-max border"
+                          style="background-color: {tag.color_hex}15; color: {tag.color_hex}; border-color: {tag.color_hex}30"
+                        >
+                          {tag.name}
+                        </span>
+                      {/each}
+                    </div>
                   {/if}
                 </td>
                 <td class="px-6 py-4">

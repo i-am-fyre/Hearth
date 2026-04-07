@@ -7,3 +7,4 @@ from app.models.bank_transaction import BankTransaction
 from app.models.rule import Rule
 from app.models.budget import Budget, BudgetLine
 from app.models.household import Household, HouseholdMember
+from app.models.tag import Tag

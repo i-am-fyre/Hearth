@@ -5,6 +5,7 @@ from app.models.transaction import Transaction, Entry
 from app.models.account import Account
 from app.schemas.transaction import TransactionCreate, TransactionUpdate
 from app.services.household_service import get_household_user_ids
+from app.services.tag_service import get_tags_by_ids
 
 def create_transaction(db: Session, transaction_in: TransactionCreate, user_id: int) -> Transaction:
     # 1. Total debits MUST equal total credits.
@@ -33,6 +34,11 @@ def create_transaction(db: Session, transaction_in: TransactionCreate, user_id: 
         description=transaction_in.description,
         receipt_id=transaction_in.receipt_id
     )
+    
+    # Handle Transaction Tags
+    if transaction_in.tag_ids:
+        db_transaction.tags = get_tags_by_ids(db, transaction_in.tag_ids, user_id)
+        
     db.add(db_transaction)
     db.flush() # Get transaction ID
 
@@ -45,6 +51,13 @@ def create_transaction(db: Session, transaction_in: TransactionCreate, user_id: 
             credit=entry_in.credit,
             description=entry_in.description
         )
+        
+        # Handle Entry Tags (Cascade from transaction if requested, otherwise use entry's own tags)
+        if transaction_in.cascade_tags_to_entries and transaction_in.tag_ids:
+            db_entry.tags = db_transaction.tags
+        elif entry_in.tag_ids:
+            db_entry.tags = get_tags_by_ids(db, entry_in.tag_ids, user_id)
+            
         db.add(db_entry)
 
     db.commit()
@@ -55,8 +68,17 @@ def get_transactions(db: Session, user_id: int) -> list[Transaction]:
     user_ids = get_household_user_ids(db, user_id)
     return db.query(Transaction).filter(Transaction.user_id.in_(user_ids)).all()
 
-def update_transaction(db: Session, db_txn: Transaction, transaction_in: TransactionUpdate) -> Transaction:
+def update_transaction(db: Session, db_txn: Transaction, transaction_in: TransactionUpdate, user_id: int) -> Transaction:
     update_data = transaction_in.model_dump(exclude_unset=True)
+    
+    cascade_tags = update_data.pop("cascade_tags_to_entries", False)
+    
+    if "tag_ids" in update_data:
+        tag_ids = update_data.pop("tag_ids")
+        if tag_ids is not None:
+            db_txn.tags = get_tags_by_ids(db, tag_ids, user_id)
+        else:
+            db_txn.tags = []
     
     # Handle entries separately if provided
     if "entries" in update_data:
@@ -84,6 +106,13 @@ def update_transaction(db: Session, db_txn: Transaction, transaction_in: Transac
                 credit=entry_in['credit'],
                 description=entry_in.get('description')
             )
+            
+            # Handle Entry Tags
+            if cascade_tags and getattr(db_txn, 'tags', None):
+                db_entry.tags = db_txn.tags
+            elif entry_in.get('tag_ids'):
+                db_entry.tags = get_tags_by_ids(db, entry_in['tag_ids'], user_id)
+                
             db.add(db_entry)
 
     # Update other fields
