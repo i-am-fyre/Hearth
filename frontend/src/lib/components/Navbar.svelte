@@ -1,7 +1,18 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { session } from "$lib/session.svelte";
+  import { api } from "$lib/api";
 
   let { showSettings = $bindable(undefined) } = $props();
+  let systemInfo = $state<any>(null);
+
+  onMount(async () => {
+    try {
+      systemInfo = await api.get("/system/info");
+    } catch (e) {
+      console.error("Failed to fetch system info", e);
+    }
+  });
 
   function handleLogout() {
     session.logout();
@@ -10,7 +21,24 @@
 
 <nav class="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-10 backdrop-blur-md bg-opacity-80">
   <div class="max-w-6xl mx-auto flex justify-between items-center">
-    <a href="/" class="text-xl font-bold text-blue-400 hover:text-blue-300 transition-colors">Hearth</a>
+    <div class="flex items-center gap-3">
+      <a href="/" class="text-xl font-bold text-blue-400 hover:text-blue-300 transition-colors">
+        Hearth
+      </a>
+      {#if systemInfo?.update_available}
+        <a 
+          href="https://github.com/i-am-fyre/Hearth/releases/latest" 
+            target="_blank"
+            class="px-2 py-0.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 text-[8px] font-black uppercase tracking-widest rounded-full hover:bg-blue-500/20 transition-all flex items-center gap-1 animate-pulse"
+          >
+            Update Available
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-2 w-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        {/if}
+    </div>
+
     <div class="flex items-center gap-6">
       {#if session.user}
         <div class="hidden sm:flex flex-col items-end">

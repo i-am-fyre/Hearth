@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = ""
     FRONTEND_URL: str = "http://localhost:5173"
     GEMINI_API_KEY: str | None = None
+    
+    # Versioning
+    VERSION_FILE: str = "/app/VERSION"
+    GITHUB_OWNER: str = "i-am-fyre"
+    GITHUB_REPO: str = "Hearth"
 
     class Config:
         env_file = ".env"
