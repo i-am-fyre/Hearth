@@ -41,3 +41,10 @@ samples/
 # OS
 .DS_Store
 Thumbs.db
+
+# Packaging artifacts
+*.deb
+nfpm
+backend/dist/
+backend/build/
+backend/*.spec
