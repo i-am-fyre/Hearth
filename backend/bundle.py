@@ -20,7 +20,23 @@ if os.path.exists(FRONTEND_PATH):
     async def spa_fallback(request, exc):
         return FileResponse(os.path.join(FRONTEND_PATH, "index.html"))
 
+# Database Initialization
+def init_db():
+    from app.services.user_service import Base
+    from app.api.deps import engine
+    import sqlalchemy
+    
+    print(f"Checking database connection: {settings.DATABASE_URL.split('@')[-1]}...")
+    try:
+        # Create tables if they don't exist
+        Base.metadata.create_all(bind=engine)
+        print("Database schema verified/initialized successfully.")
+    except Exception as e:
+        print(f"CRITICAL: Failed to initialize database: {e}")
+        # We don't exit here as the app might recover or the user might fix the config
+
 if __name__ == "__main__":
+    init_db()
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
     
