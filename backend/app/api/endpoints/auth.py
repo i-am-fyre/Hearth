@@ -20,16 +20,24 @@ router = APIRouter()
 
 @router.post("/register", response_model=UserResponse)
 def register(user_in: UserCreate, db: SessionDep) -> Any:
-    user = user_service.get_user_by_email(db, email=user_in.email)
-    if user:
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this username already exists in the system.",
-        )
-    user = user_service.create_user(db, user_in)
-    # Process any pending household invitations for this user's email
-    process_pending_invitations(db, user)
-    return user
+    try:
+        user = user_service.get_user_by_email(db, email=user_in.email)
+        if user:
+            raise HTTPException(
+                status_code=400,
+                detail="The user with this username already exists in the system.",
+            )
+        user = user_service.create_user(db, user_in)
+        # Process any pending household invitations for this user's email
+        process_pending_invitations(db, user)
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Registration Error: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error during registration")
 
 @router.post("/login", response_model=Token)
 def login_access_token(

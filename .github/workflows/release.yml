@@ -59,6 +59,11 @@ jobs:
             --hidden-import uvicorn.protocols.websockets.auto \
             --hidden-import uvicorn.lifespan \
             --hidden-import uvicorn.lifespan.on \
+            --hidden-import fastapi_mail \
+            --hidden-import aiosmtplib \
+            --hidden-import email.mime.multipart \
+            --hidden-import email.mime.text \
+            --hidden-import email.mime.base \
             bundle.py
 
       - name: Install NFPM
