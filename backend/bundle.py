@@ -22,8 +22,8 @@ if os.path.exists(FRONTEND_PATH):
 
 # Database Initialization
 def init_db():
-    from app.services.user_service import Base
-    from app.api.deps import engine
+    from app.db.database import Base, engine
+    import app.models  # Import models to register them with Base
     import sqlalchemy
     
     print(f"Checking database connection: {settings.DATABASE_URL.split('@')[-1]}...")
