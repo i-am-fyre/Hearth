@@ -32,9 +32,11 @@ def init_db():
         # Create tables if they don't exist
         Base.metadata.create_all(bind=engine)
         print("Database schema verified/initialized successfully.")
+        app.state.setup_mode = False
     except Exception as e:
         print(f"CRITICAL: Failed to initialize database: {e}")
-        # We don't exit here as the app might recover or the user might fix the config
+        app.state.setup_mode = True
+        # We don't exit here as the app will serve the Setup Wizard
 
 if __name__ == "__main__":
     init_db()
