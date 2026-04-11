@@ -1,5 +1,5 @@
 import uvicorn
-from app.main import app
+from app.main import app as fastapi_app
 from app.core.config import settings
 import os
 import sys
@@ -15,9 +15,9 @@ if os.path.exists(FRONTEND_PATH):
     from fastapi.staticfiles import StaticFiles
     from fastapi.responses import FileResponse
     
-    app.mount("/", StaticFiles(directory=FRONTEND_PATH, html=True), name="static")
+    fastapi_app.mount("/", StaticFiles(directory=FRONTEND_PATH, html=True), name="static")
     
-    @app.exception_handler(404)
+    @fastapi_app.exception_handler(404)
     async def spa_fallback(request, exc):
         return FileResponse(os.path.join(FRONTEND_PATH, "index.html"))
 
@@ -32,10 +32,10 @@ def init_db():
         # Create tables if they don't exist
         Base.metadata.create_all(bind=engine)
         print("Database schema verified/initialized successfully.")
-        app.state.setup_mode = False
+        fastapi_app.state.setup_mode = False
     except Exception as e:
         print(f"CRITICAL: Failed to initialize database: {e}")
-        app.state.setup_mode = True
+        fastapi_app.state.setup_mode = True
         # We don't exit here as the app will serve the Setup Wizard
 
 if __name__ == "__main__":
@@ -44,4 +44,4 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")
     
     print(f"Starting Hearth on {host}:{port}...")
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(fastapi_app, host=host, port=port, log_level="info")
