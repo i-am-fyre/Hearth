@@ -70,6 +70,7 @@
     entries: Entry[];
     tags: AppTag[];
     receipt_id?: number | null;
+    can_edit?: boolean;
   }
 
   interface Account {
@@ -78,10 +79,13 @@
     type: string;
     currency: string;
     balance: number;
+    can_edit?: boolean;
   }
 
   let transactions = $state<Transaction[]>([]);
   let accounts = $state<Account[]>([]);
+  // Accounts the signed-in user may post to (read-only members only see the rest).
+  const writableAccounts = $derived(accounts.filter((a) => a.can_edit !== false));
   let tags = $state<AppTag[]>([]);
   let budgets = $state<any[]>([]);
   let rules = $state<any[]>([]);
@@ -1477,7 +1481,7 @@
                   class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition-colors"
                 >
                   <option value={null}>Select Account</option>
-                  {#each accounts as account}
+                  {#each writableAccounts as account}
                     <option value={account.id}
                       >{account.name} ({account.type})</option
                     >
@@ -1516,7 +1520,7 @@
                   class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition-colors"
                 >
                   <option value={null}>Select Account</option>
-                  {#each accounts as account}
+                  {#each writableAccounts as account}
                     <option value={account.id}
                       >{account.name} ({account.type})</option
                     >
@@ -1999,7 +2003,7 @@
                         class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
                       >
                         <option value={null}>Select Account</option>
-                        {#each accounts as account}
+                        {#each writableAccounts as account}
                           <option value={account.id}
                             >{account.name} ({formatBalance(account)}
                             2, )})</option
@@ -2040,7 +2044,7 @@
                         class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
                       >
                         <option value={null}>Select Account</option>
-                        {#each accounts as account}
+                        {#each writableAccounts as account}
                           <option value={account.id}
                             >{account.name} ({formatBalance(account)}
                             2, )})</option
@@ -2240,6 +2244,9 @@
               </p>
             </div>
             {#if !isEditingTransaction}
+              {#if selectedTransaction.can_edit === false}
+                <span class="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-800 text-slate-400 border border-slate-700" title="You have read-only access to this household's data">View only</span>
+              {:else}
               <button
                 onclick={startEditingTransaction}
                 class="px-4 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-full text-xs font-bold transition-all flex items-center gap-2"
@@ -2259,6 +2266,7 @@
                 >
                 Edit
               </button>
+              {/if}
               <button
                 onclick={() => startRuleFromTransaction(selectedTransaction)}
                 class="px-4 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-full text-xs font-bold transition-all flex items-center gap-2"
@@ -2268,6 +2276,7 @@
                 </svg>
                 Create Rule
               </button>
+              {#if selectedTransaction.can_edit !== false}
               <button
                 onclick={handleDeleteTransaction}
                 class="px-4 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 rounded-full text-xs font-bold transition-all flex items-center gap-2"
@@ -2277,6 +2286,7 @@
                 </svg>
                 Delete
               </button>
+              {/if}
             {:else}
               <div class="flex items-center gap-2">
                 <button
@@ -2505,7 +2515,7 @@
                               class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs outline-none focus:border-blue-500"
                             >
                               <option value={0}>Select Account...</option>
-                              {#each accounts as acc}
+                              {#each writableAccounts as acc}
                                 <option value={acc.id}>{acc.name}</option>
                               {/each}
                             </select>
@@ -2612,7 +2622,8 @@
               <span class="text-[10px] font-bold text-slate-500 uppercase"
                 >Attached Receipt</span
               >
-              {#if !selectedTransaction.receipt_id}
+              <!-- Receipts can only be attached to transactions you can edit. -->
+              {#if !selectedTransaction.receipt_id && selectedTransaction.can_edit !== false}
                 <label
                   class="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-full font-bold transition-all cursor-pointer"
                 >
@@ -3007,6 +3018,9 @@
                   </div>
                 </div>
                 <div class="flex items-center gap-3">
+                  {#if b.can_edit === false}
+                    <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-800 text-slate-400 border border-slate-700" title="You have read-only access to this household's data">View only</span>
+                  {:else}
                   <button 
                     onclick={() => { activeBudgetId = b.id; showAddBudgetLine = true; }}
                     class="p-3 bg-slate-800 hover:bg-blue-600 text-slate-400 hover:text-white rounded-2xl transition-all shadow-xl"
@@ -3018,12 +3032,14 @@
                   </button>
                   <button 
                     onclick={() => handleDeleteBudget(b.id)}
+                    aria-label="Delete budget {b.name}"
                     class="p-3 bg-slate-800 hover:bg-red-600/20 hover:text-red-500 text-slate-500 rounded-2xl transition-all shadow-xl"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </button>
+                  {/if}
                 </div>
               </div>
 
@@ -3278,7 +3294,7 @@
 
   <ImportCenter 
     bind:isOpen={showImportCenter} 
-    {accounts}
+    accounts={writableAccounts}
     onimported={refreshData}
   />
 </div>

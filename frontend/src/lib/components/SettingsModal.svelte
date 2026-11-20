@@ -322,8 +322,9 @@
                 </button>
               </div>
               <p class="text-[10px] text-slate-600 italic">
-                People join only after accepting. Members see each other's accounts and transactions.
-                Inviting an existing member changes their role.
+                People join only after accepting. Members can view and change the household's
+                data; read-only members can view it but change only their own. Inviting an
+                existing member changes their role.
               </p>
             </form>
           {:else if me}
