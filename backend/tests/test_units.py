@@ -1,0 +1,66 @@
+"""Tests that don't need a database."""
+import os
+import stat
+import sys
+
+import pytest
+
+from app.api.endpoints.system import is_newer_version
+from app.core.config import Settings
+from app.db.url import normalize_database_url
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        ("postgresql://u:p@h:5432/db", "postgresql+psycopg://u:p@h:5432/db"),
+        ("postgres://u:p@h/db", "postgresql+psycopg://u:p@h/db"),
+        ("postgresql+psycopg2://u:p@h/db", "postgresql+psycopg://u:p@h/db"),
+        ("postgresql+psycopg://u:p@h/db", "postgresql+psycopg://u:p@h/db"),
+        ("sqlite:///x.db", "sqlite:///x.db"),
+    ],
+)
+def test_normalize_database_url(url, expected):
+    assert normalize_database_url(url) == expected
+
+
+@pytest.mark.parametrize(
+    "latest, current, expected",
+    [
+        ("v0.1.10", "v0.1.9", True),  # the case plain string comparison gets wrong
+        ("v0.2.0", "v0.1.10", True),
+        ("v0.1.10", "v0.1.10", False),
+        ("v0.1.9", "v0.1.10", False),
+        ("unknown", "v0.1.10", False),
+        ("v0.1.11", "unknown", False),
+    ],
+)
+def test_is_newer_version(latest, current, expected):
+    assert is_newer_version(latest, current) is expected
+
+
+@pytest.mark.parametrize("placeholder", ["", "  ", "your-super-secret-key-change-it-in-production"])
+def test_missing_or_placeholder_secret_key_is_generated_and_persisted(tmp_path, placeholder):
+    key_file = tmp_path / "nested" / "secret_key"
+    first = Settings(SECRET_KEY=placeholder, SECRET_KEY_FILE=str(key_file))
+    assert first.SECRET_KEY not in {"", "your-super-secret-key-change-it-in-production"}
+    assert len(first.SECRET_KEY) == 64
+    assert key_file.read_text().strip() == first.SECRET_KEY
+
+    # Restarting reuses the saved key, so people stay signed in.
+    second = Settings(SECRET_KEY=placeholder, SECRET_KEY_FILE=str(key_file))
+    assert second.SECRET_KEY == first.SECRET_KEY
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions")
+def test_generated_secret_key_file_is_private(tmp_path):
+    key_file = tmp_path / "secret_key"
+    Settings(SECRET_KEY="", SECRET_KEY_FILE=str(key_file))
+    assert stat.S_IMODE(os.stat(key_file).st_mode) == 0o600
+
+
+def test_explicit_secret_key_is_used_as_is(tmp_path):
+    key_file = tmp_path / "secret_key"
+    s = Settings(SECRET_KEY="my-own-key", SECRET_KEY_FILE=str(key_file))
+    assert s.SECRET_KEY == "my-own-key"
+    assert not key_file.exists()
