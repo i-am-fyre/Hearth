@@ -1,9 +1,10 @@
 from typing import Annotated
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
+import jwt
 from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.core.security import decode_access_token
 from app.db.database import SessionLocal
 from app.models.user import User
 from app.services import user_service
@@ -27,11 +28,11 @@ def get_current_user(db: SessionDep, token: TokenDep) -> User:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        payload = decode_access_token(token)
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
-    except JWTError:
+    except jwt.InvalidTokenError:
         raise credentials_exception
     
     user = user_service.get_user_by_email(db, email=email)

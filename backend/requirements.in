@@ -1,0 +1,26 @@
+# Hearth's direct backend dependencies, with the version ranges we support.
+#
+# requirements.txt is generated from this file and pins every package (including
+# transitive ones) so Docker and release builds install exactly what was tested.
+# After editing this file, regenerate it from the backend/ directory with:
+#
+#   uv pip compile requirements.in --universal --python-version 3.11 -o requirements.txt
+#
+# To pick up newer versions within these ranges, add --upgrade.
+
+fastapi[standard]>=0.115,<1
+SQLAlchemy>=2.0.29,<2.2
+alembic>=1.13.1,<2
+psycopg[binary]>=3.2,<4
+pydantic>=2.7,<3
+pydantic-settings>=2.2.1,<3
+bcrypt>=4.1,<6
+PyJWT>=2.10,<3
+python-multipart>=0.0.18
+uvicorn>=0.29
+httpx>=0.27,<1
+cryptography>=42
+pytesseract>=0.3.10
+Pillow>=10.2
+fastapi-mail>=1.4.1,<2
+google-genai>=1.0,<4
