@@ -2,12 +2,37 @@
 import os
 import stat
 import sys
+from pathlib import Path
 
 import pytest
 
+from app.api.endpoints import system
 from app.api.endpoints.system import is_newer_version
 from app.core.config import Settings
 from app.db.url import normalize_database_url
+
+REPO_VERSION = (Path(__file__).resolve().parents[2] / "VERSION").read_text().strip()
+
+
+def test_current_version_is_read_from_the_repo_version_file():
+    assert system.get_current_version() == REPO_VERSION
+
+
+def test_version_file_setting_wins_and_empty_files_are_skipped(tmp_path, monkeypatch):
+    empty = tmp_path / "EMPTY"
+    empty.write_text("\n")
+    monkeypatch.setattr(system.settings, "VERSION_FILE", str(empty))
+    assert system.get_current_version() == REPO_VERSION  # falls through to the next file
+
+    explicit = tmp_path / "VERSION"
+    explicit.write_text("v9.9.9\n")
+    monkeypatch.setattr(system.settings, "VERSION_FILE", str(explicit))
+    assert system.get_current_version() == "v9.9.9"
+
+
+def test_version_is_unknown_without_a_version_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(system, "_version_file_candidates", lambda: [tmp_path / "missing"])
+    assert system.get_current_version() == "unknown"
 
 
 @pytest.mark.parametrize(

@@ -24,4 +24,5 @@ pyinstaller --onefile --name hearth --noconfirm \
   --hidden-import email.mime.base \
   --collect-submodules alembic \
   --add-data "alembic:alembic" \
+  --add-data "../VERSION:." \
   bundle.py
