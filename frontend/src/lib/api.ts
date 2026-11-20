@@ -1,6 +1,10 @@
-export const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+// In development the Vite dev server (port 5173) talks to the backend on port 8000.
+// Production builds are served by the backend itself, so use a same-origin path;
+// a hard-coded localhost would only work in a browser on the server machine.
+export const BASE_URL =
+    import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000/api/v1' : '/api/v1');
 
-export async function request(path: string, options: RequestInit = {}) {
+export async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem('token');
 
     const headers = new Headers(options.headers);

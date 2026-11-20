@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { request } from '$lib/api';
+    import { request } from '#lib/api.ts';
     import { AlertTriangle, CheckCircle, Mail } from 'lucide-svelte';
 
     let email = $state('');

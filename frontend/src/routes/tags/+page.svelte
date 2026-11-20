@@ -1,8 +1,8 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { request } from '$lib/api';
+    import { request } from '#lib/api.ts';
     import { Tag as TagIcon, Plus, Trash2, Edit2, Check, X } from 'lucide-svelte';
-    import Navbar from '$lib/components/Navbar.svelte';
+    import Navbar from '#lib/components/Navbar.svelte';
 
     type AppTag = {
         id: number;
@@ -25,7 +25,7 @@
         loading = true;
         error = null;
         try {
-            tags = await request<AppTag[]>('/tags');
+            tags = await request<AppTag[]>('/tags/');
         } catch (e: any) {
             error = e.message;
         } finally {
@@ -49,7 +49,7 @@
                 });
                 tags = tags.map(t => t.id === editingId ? updated : t);
             } else {
-                const created = await request<AppTag>('/tags', {
+                const created = await request<AppTag>('/tags/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: tagName, color_hex: tagColor })

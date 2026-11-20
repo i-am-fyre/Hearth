@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, BASE_URL } from "$lib/api";
+  import { api, BASE_URL } from "#lib/api.ts";
   import { goto } from "$app/navigation";
-  import { session } from "$lib/session.svelte";
-  import Navbar from "$lib/components/Navbar.svelte";
-  import ImportCenter from "$lib/components/ImportCenter.svelte";
+  import { session } from "#lib/session.svelte.ts";
+  import Navbar from "#lib/components/Navbar.svelte";
+  import ImportCenter from "#lib/components/ImportCenter.svelte";
   import {
     Chart as ChartJS,
     Title,
@@ -490,7 +490,7 @@
   let verifyTotal = $state<number>(0);
   let verifyFromAccountId = $state<number | null>(null);
   let verifyToAccountId = $state<number | null>(null);
-  let verifyItems = $state<{ name: string; price: number }[]>([]);
+  let verifyItems = $state<{ name: string; price: number; tag_ids: number[] }[]>([]);
 
   async function fetchReceiptImage(receiptId: number) {
     try {
@@ -2510,7 +2510,7 @@
                         type="button"
                         onclick={() => {
                           if (editTransactionData.tag_ids.includes(tag.id)) {
-                            editTransactionData.tag_ids = editTransactionData.tag_ids.filter(id => id !== tag.id);
+                            editTransactionData.tag_ids = editTransactionData.tag_ids.filter((id: number) => id !== tag.id);
                           } else {
                             editTransactionData.tag_ids = [...editTransactionData.tag_ids, tag.id];
                           }
@@ -2644,7 +2644,7 @@
                                     type="button"
                                     onclick={() => {
                                       if (entry.tag_ids.includes(tag.id)) {
-                                        entry.tag_ids = entry.tag_ids.filter(id => id !== tag.id);
+                                        entry.tag_ids = entry.tag_ids.filter((id: number) => id !== tag.id);
                                       } else {
                                         entry.tag_ids = [...entry.tag_ids, tag.id];
                                       }

@@ -1,9 +1,9 @@
 <script lang="ts">
-    import { request } from '$lib/api';
+    import { request } from '#lib/api.ts';
     import { AlertTriangle, CheckCircle, Lock } from 'lucide-svelte';
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
 
-    let token = $derived($page.url.searchParams.get('token') || '');
+    let token = $derived(page.url.searchParams.get('token') || '');
     let new_password = $state('');
     let confirm_password = $state('');
     let loading = $state(false);

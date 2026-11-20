@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api } from "$lib/api";
-  import Navbar from "$lib/components/Navbar.svelte";
+  import { api } from "#lib/api.ts";
+  import Navbar from "#lib/components/Navbar.svelte";
 
   interface Account {
     id: number;
@@ -102,7 +102,7 @@
 </script>
 
 <svelte:head>
-  <title>Accounts | Hearth</title>
+  <title>Accounts - Hearth</title>
 </svelte:head>
 
 <Navbar />

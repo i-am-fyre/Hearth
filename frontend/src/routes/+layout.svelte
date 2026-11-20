@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { session } from '$lib/session.svelte';
+  import { session } from '#lib/session.svelte.ts';
   import '../app.css';
 
   let { children } = $props();
