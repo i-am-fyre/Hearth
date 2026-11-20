@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, BASE_URL } from "#lib/api.ts";
-  import { goto } from "$app/navigation";
-  import { session } from "#lib/session.svelte.ts";
+  import { api, BASE_URL, getToken } from "#lib/api.ts";
+  import { preferences, CURRENCIES } from "#lib/preferences.svelte.ts";
+  import { confirmDialog } from "#lib/ui/dialog.svelte.ts";
+  import { errorMessage, notify } from "#lib/ui/notify.svelte.ts";
   import Navbar from "#lib/components/Navbar.svelte";
   import ImportCenter from "#lib/components/ImportCenter.svelte";
   import {
@@ -86,8 +87,6 @@
   let rules = $state<any[]>([]);
   let budgetVariances = $state<Record<number, any>>({});
   let currentTab = $state<'overview' | 'budgets' | 'rules' | 'bank-feed'>('overview');
-  let currentUser: any = $state(null);
-  let household: any = $state(null);
   let loading = $state(true);
   let isUploading = $state(false);
   let showAddAccount = $state(false);
@@ -96,28 +95,11 @@
   let showMatchModal = $state(false);
   let verifyExtractionMethod = $state<string>("");
   let potentialMatches = $state<any[]>([]);
-  let showSettings = $state<boolean>(false);
   let showTransactionDetail = $state<boolean>(false);
   let isEditingTransaction = $state<boolean>(false);
   let editTransactionData = $state<any>(null);
   let selectedTransaction = $state<Transaction | null>(null);
   
-  // Custom Confirm Modal State
-  let confirmState = $state({
-    show: false,
-    title: "",
-    message: "",
-    onConfirm: () => {},
-  });
-
-  function requestConfirm(title: string, message: string, onConfirm: () => void) {
-    confirmState = {
-      show: true,
-      title,
-      message,
-      onConfirm
-    };
-  }
   let showImportCenter = $state(false);
   let unreconciledCount = $state<number>(0);
   let isAttachingReceipt = $state<boolean>(false);
@@ -127,7 +109,6 @@
   let pendingReceipts = $state<any[]>([]);
   let isBatchUploading = $state<boolean>(false);
   let filterAccountId = $state<number | null>(null);
-  let defaultCurrency = $state<string>("USD");
   let dateFilterPreset = $state<string>("this-month");
   let customStartDate = $state("");
   let customEndDate = $state("");
@@ -498,7 +479,7 @@
         `${BASE_URL}/receipts/${receiptId}/download`,
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            Authorization: `Bearer ${getToken()}`,
           },
         },
       );
@@ -533,7 +514,7 @@
   // New Account Form State
   let newAccountName = $state("");
   let newAccountType = $state("asset");
-  let newAccountCurrency = $state("USD");
+  let newAccountCurrency = $state(preferences.defaultCurrency);
 
   // New Transaction Form State
   let txnDate = $state(new Date().toISOString().split("T")[0]);
@@ -542,24 +523,14 @@
   let txnToAccountId = $state(null);
   let txnAmount = $state(0);
 
+  // The root layout only renders this page for signed-in users.
   onMount(async () => {
-    if (!session.user) await session.init();
-    if (!session.user) {
-      goto("/login");
-      return;
-    }
-
-    const savedCurrency = localStorage.getItem("defaultCurrency");
-    if (savedCurrency) defaultCurrency = savedCurrency;
-    else defaultCurrency = "CAD";
-
     await refreshData();
   });
 
+  // Each time the Add Account form opens, start from the preferred currency.
   $effect(() => {
-    if (showAddAccount && !newAccountCurrency) {
-      newAccountCurrency = defaultCurrency;
-    }
+    if (showAddAccount) newAccountCurrency = preferences.defaultCurrency;
   });
 
   async function fetchPendingReceipts() {
@@ -570,13 +541,29 @@
     }
   }
 
+  async function handleDeleteReceipt(receipt: any) {
+    const ok = await confirmDialog({
+      title: "Delete Receipt",
+      message: "Delete this receipt and its stored image? This can't be undone.",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/receipts/${receipt.id}`);
+      await fetchPendingReceipts();
+    } catch (e: any) {
+      notify.error(`Failed to delete receipt: ${e.message}`);
+    }
+  }
+
   async function handleReprocessReceipts() {
     try {
       await api.post("/receipts/reprocess", {});
       await fetchPendingReceipts();
     } catch (err) {
       console.error("Failed to reprocess receipts:", err);
-      alert("Failed to re-trigger processing.");
+      notify.error("Failed to re-trigger processing.");
     }
   }
 
@@ -629,10 +616,9 @@
   async function refreshData() {
     loading = true;
     try {
-      const [txnsData, accountsData, hhData, budgetsData, rulesData, resTags] = await Promise.all([
+      const [txnsData, accountsData, budgetsData, rulesData, resTags] = await Promise.all([
         api.get("/transactions/"),
         api.get("/accounts/"),
-        api.get("/households/"),
         api.get("/budgets/"),
         api.get("/rules/"),
         api.get("/tags/"),
@@ -643,8 +629,6 @@
       
       transactions = txnsData;
       accounts = accountsData;
-      household = hhData;
-      currentUser = session.user;
       tags = resTags;
       budgets = budgetsData;
       rules = rulesData;
@@ -658,6 +642,7 @@
       await fetchPendingReceipts();
     } catch (e) {
       console.error("Failed to fetch dashboard data", e);
+      notify.error(`Couldn't load your data: ${errorMessage(e)}`);
     } finally {
       loading = false;
     }
@@ -674,13 +659,13 @@
       newAccountName = "";
       await refreshData();
     } catch (e: any) {
-      alert(`Failed to create account: ${e.message}`);
+      notify.error(`Failed to create account: ${e.message}`);
     }
   }
 
   async function handleAddTransaction() {
     if (!txnFromAccountId || !txnToAccountId || txnAmount <= 0) {
-      alert("Please select accounts and enter an amount.");
+      notify.info("Please select accounts and enter an amount.");
       return;
     }
 
@@ -698,7 +683,7 @@
       txnAmount = 0;
       await refreshData();
     } catch (e: any) {
-      alert(`Failed to create transaction: ${e.message}`);
+      notify.error(`Failed to create transaction: ${e.message}`);
     }
   }
 
@@ -731,7 +716,7 @@
       isUpdatingMatch = false;
       matchTransactionId = null;
     } catch (e: any) {
-      alert(`Upload failed: ${e.message}`);
+      notify.error(`Upload failed: ${e.message}`);
     } finally {
       isUploading = false;
     }
@@ -764,7 +749,7 @@
 
   async function handleVerifySubmit() {
     if (!verifyFromAccountId || !verifyToAccountId) {
-      alert("Please select both accounts.");
+      notify.info("Please select both accounts.");
       return;
     }
 
@@ -857,7 +842,7 @@
         }
       }
     } catch (e: any) {
-      alert(`Failed to save transaction: ${e.message}`);
+      notify.error(`Failed to save transaction: ${e.message}`);
     }
   }
 
@@ -889,9 +874,9 @@
         selectedTransaction = updated;
         if (updated.receipt_id) await fetchReceiptImage(updated.receipt_id);
       }
-      alert("Receipt attached successfully!");
+      notify.success("Receipt attached successfully!");
     } catch (e: any) {
-      alert(`Attachment failed: ${e.message}`);
+      notify.error(`Attachment failed: ${e.message}`);
     } finally {
       isAttachingReceipt = false;
     }
@@ -930,9 +915,7 @@
       );
 
       if (Math.abs(totalDebit - totalCredit) > 0.001) {
-        alert(
-          `Transaction unbalanced! Total Debits: ${totalDebit.toFixed(2)}, Total Credits: ${totalCredit.toFixed(2)}`,
-        );
+        notify.error(`Transaction unbalanced! Total Debits: ${totalDebit.toFixed(2)}, Total Credits: ${totalCredit.toFixed(2)}`);
         return;
       }
 
@@ -946,23 +929,29 @@
       editTransactionData = null;
       await refreshData();
     } catch (e: any) {
-      alert(`Failed to update transaction: ${e.message}`);
+      notify.error(`Failed to update transaction: ${e.message}`);
     }
   }
 
-  function handleDeleteTransaction() {
+  async function handleDeleteTransaction() {
     const txn = selectedTransaction;
     if (!txn) return;
 
-    requestConfirm("Delete Transaction", "Permanently delete this transaction?", async () => {
-      try {
-        await api.delete(`/transactions/${txn.id}`);
-        showTransactionDetail = false;
-        await refreshData();
-      } catch (e: any) {
-        alert(`Delete failed: ${e.message}`);
-      }
+    const ok = await confirmDialog({
+      title: "Delete Transaction",
+      message: "Permanently delete this transaction? This can't be undone.",
+      confirmText: "Delete",
+      danger: true,
     });
+    if (!ok) return;
+    try {
+      await api.delete(`/transactions/${txn.id}`);
+      showTransactionDetail = false;
+      notify.success("Transaction deleted.");
+      await refreshData();
+    } catch (e: any) {
+      notify.error(`Delete failed: ${e.message}`);
+    }
   }
 
   function addEditEntry() {
@@ -975,46 +964,6 @@
   function removeEditEntry(index: number) {
     editTransactionData.entries = editTransactionData.entries.filter(
       (_: any, i: number) => i !== index,
-    );
-  }
-
-  // Household logic
-  let inviteEmail = $state("");
-  let inviteRole = $state("member");
-  let isInviting = $state(false);
-
-  async function handleInviteMember() {
-    if (!inviteEmail) return;
-    isInviting = true;
-    try {
-      const res = await api.post("/households/invite", { email: inviteEmail, role: inviteRole });
-      inviteEmail = "";
-      if (res.status === "invite_sent") {
-        alert("User not found! An invitation has been sent to their email.");
-      } else {
-        alert("Member added successfully!");
-      }
-      // Refresh household data
-      household = await api.get("/households/");
-    } catch (e: any) {
-      alert(`Failed to invite member: ${e.message}`);
-    } finally {
-      isInviting = false;
-    }
-  }
-
-  function handleRemoveMember(userId: number) {
-    requestConfirm(
-      "Remove Member",
-      "Are you sure you want to remove this member from the household?",
-      async () => {
-        try {
-          await api.delete(`/households/member/${userId}`);
-          household = await api.get("/households/");
-        } catch (e: any) {
-          alert(`Failed to remove member: ${e.message}`);
-        }
-      }
     );
   }
 
@@ -1038,7 +987,7 @@
       newBudgetName = "";
       await refreshData();
     } catch (e: any) {
-      alert(`Failed to create budget: ${e.message}`);
+      notify.error(`Failed to create budget: ${e.message}`);
     }
   }
 
@@ -1054,17 +1003,18 @@
       newBudgetLineAmount = 0;
       await refreshData();
     } catch (e: any) {
-      alert(`Failed to add budget line: ${e.message}`);
+      notify.error(`Failed to add budget line: ${e.message}`);
     }
   }
 
   async function handleDeleteBudget(id: number) {
-    if (!confirm("Delete this budget?")) return;
+    const ok = await confirmDialog({ title: "Delete Budget", message: "Delete this budget and its lines? This can't be undone.", confirmText: "Delete", danger: true });
+    if (!ok) return;
     try {
       await api.delete(`/budgets/${id}`);
       await refreshData();
     } catch (e: any) {
-      alert(`Failed to delete budget: ${e.message}`);
+      notify.error(`Failed to delete budget: ${e.message}`);
     }
   }
 
@@ -1088,7 +1038,7 @@
       newRuleAccountId = null;
       await refreshData();
     } catch (e: any) {
-      alert(`Failed to create rule: ${e.message}`);
+      notify.error(`Failed to create rule: ${e.message}`);
     }
   }
 
@@ -1097,17 +1047,18 @@
       await api.patch(`/rules/${rule.id}`, { active: !rule.active });
       await refreshData();
     } catch (e: any) {
-      alert(`Failed to update rule: ${e.message}`);
+      notify.error(`Failed to update rule: ${e.message}`);
     }
   }
 
   async function handleDeleteRule(id: number) {
-    if (!confirm("Delete this rule?")) return;
+    const ok = await confirmDialog({ title: "Delete Rule", message: "Delete this rule? Future transactions won't be categorized by it.", confirmText: "Delete", danger: true });
+    if (!ok) return;
     try {
       await api.delete(`/rules/${id}`);
       await refreshData();
     } catch (e: any) {
-      alert(`Failed to delete rule: ${e.message}`);
+      notify.error(`Failed to delete rule: ${e.message}`);
     }
   }
 
@@ -1143,7 +1094,11 @@
   }
 </script>
 
-<Navbar bind:showSettings={showSettings} />
+<svelte:head>
+  <title>Dashboard - Hearth</title>
+</svelte:head>
+
+<Navbar />
 
 <div class="max-w-6xl mx-auto p-6 space-y-8">
   <header class="flex justify-between items-end">
@@ -1691,12 +1646,15 @@
               class="block text-xs font-bold text-slate-500 uppercase mb-2"
               >Currency</label
             >
-            <input
+            <select
               id="acc-currency"
               bind:value={newAccountCurrency}
               class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition-colors"
-              placeholder="USD"
-            />
+            >
+              {#each CURRENCIES as c}
+                <option value={c.code}>{c.label}</option>
+              {/each}
+            </select>
           </div>
           <div class="pt-4 flex gap-4">
             <button
@@ -1716,35 +1674,6 @@
     </div>
   {/if}
 
-  {#if confirmState.show}
-    <div
-      class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
-    >
-      <div
-        class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm shadow-2xl p-6 text-center animate-in zoom-in-95 duration-200"
-      >
-        <h3 class="text-xl font-bold mb-2 text-white">{confirmState.title}</h3>
-        <p class="text-slate-400 mb-6 text-sm">{confirmState.message}</p>
-        <div class="flex gap-3">
-          <button
-            onclick={() => (confirmState.show = false)}
-            class="flex-1 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onclick={() => {
-              confirmState.show = false;
-              confirmState.onConfirm();
-            }}
-            class="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl transition-colors"
-          >
-            Confirm
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
 
   {#if showMatchModal}
     <div
@@ -2259,10 +2188,8 @@
                     </button>
                   {/if}
                   <button 
-                    onclick={() => requestConfirm("Delete Receipt", "Are you sure you want to delete this receipt?", async () => {
-                      await api.delete(`/receipts/${receipt.id}`);
-                      await fetchPendingReceipts();
-                    })}
+                    onclick={() => handleDeleteReceipt(receipt)}
+                    aria-label="Delete receipt"
                     class="p-2 hover:bg-rose-500/10 text-slate-600 hover:text-rose-500 rounded-lg transition-colors"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3348,112 +3275,6 @@
     </div>
   {/if}
 
-  {#if showSettings}
-    <div
-      class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
-    >
-      <div
-        class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
-      >
-        <div
-          class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50"
-        >
-          <h3 class="text-xl font-bold">Settings</h3>
-          <button
-            onclick={() => (showSettings = false)}
-            aria-label="Close"
-            class="p-2 hover:bg-slate-800 rounded-xl transition-colors text-slate-400"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              ><path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              /></svg
-            >
-          </button>
-        </div>
-        <div class="p-8 space-y-6">
-          <div>
-            <label
-              for="default-currency"
-              class="block text-xs font-bold text-slate-500 uppercase mb-2"
-              >Default Currency</label
-            >
-            <select
-              id="default-currency"
-              bind:value={defaultCurrency}
-              onchange={() =>
-                localStorage.setItem("defaultCurrency", defaultCurrency)}
-              class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition-colors"
-            >
-              <option value="CAD">CAD (Canadian Dollar)</option>
-              <option value="USD">USD (US Dollar)</option>
-              <option value="EUR">EUR (Euro)</option>
-              <option value="GBP">GBP (British Pound)</option>
-            </select>
-            <p class="text-[10px] text-slate-600 mt-2 italic">
-              New accounts will default to this selection.
-            </p>
-          </div>
-
-          <!-- Household Settings inline -->
-          <div class="pt-6 border-t border-slate-800">
-            <h4 class="text-sm font-bold text-blue-400 mb-4">{household?.name || "Your Household"}</h4>
-            {#if household && household.members}
-              <div class="space-y-2 mb-6">
-                {#each household.members as member}
-                  <div class="flex justify-between items-center bg-slate-950 px-4 py-2 rounded-xl border border-slate-800">
-                    <div>
-                      <span class="text-slate-300 text-sm block">{member.email}</span>
-                      <div class="flex items-center gap-2">
-                        <span class="text-[10px] text-slate-500 uppercase tracking-widest">{member.role}</span>
-                        {#if member.status === 'pending'}
-                          <span class="text-[8px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest border border-amber-500/20">Invited</span>
-                        {/if}
-                      </div>
-                    </div>
-                    <button onclick={() => handleRemoveMember(member.user_id)} aria-label="Remove member" class="text-rose-500 hover:text-rose-400 p-1 bg-rose-500/10 rounded">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-
-            <form onsubmit={(e) => { e.preventDefault(); handleInviteMember(); }} class="flex flex-col gap-3">
-              <label for="invite-email" class="block text-xs font-bold text-slate-500 uppercase">Invite Member by Email</label>
-              <div class="flex flex-col sm:flex-row gap-2">
-                <input id="invite-email" type="email" bind:value={inviteEmail} required disabled={isInviting} placeholder="partner@email.com" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" />
-                <select bind:value={inviteRole} disabled={isInviting} class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
-                  <option value="owner">Owner</option>
-                  <option value="member">Member</option>
-                  <option value="read_only">Read-Only</option>
-                </select>
-                <button type="submit" disabled={isInviting} class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-sm font-bold transition-all whitespace-nowrap">
-                  {isInviting ? 'Sending...' : 'Invite'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-        <div class="p-8 bg-slate-900 border-t border-slate-800">
-          <button
-            onclick={() => (showSettings = false)}
-            class="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-500/20 transition-all"
-          >
-            Save & Close
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
 
   <ImportCenter 
     bind:isOpen={showImportCenter} 

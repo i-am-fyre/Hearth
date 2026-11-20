@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from '#lib/api.ts';
   import { goto } from '$app/navigation';
+  import { session } from '#lib/session.svelte.ts';
 
   let email = '';
   let password = '';
@@ -16,7 +17,7 @@
       formData.append('password', password);
       
       const data = await api.postForm('/auth/login', formData);
-      localStorage.setItem('token', data.access_token);
+      await session.signIn(data.access_token);
       goto('/');
     } catch (e: any) {
       error = e.message;
@@ -25,6 +26,10 @@
     }
   }
 </script>
+
+<svelte:head>
+  <title>Sign In - Hearth</title>
+</svelte:head>
 
 <div class="flex flex-col items-center justify-center min-h-[80vh] px-4">
   <div class="w-full max-w-md p-8 bg-slate-900 rounded-2xl shadow-2xl border border-slate-800">

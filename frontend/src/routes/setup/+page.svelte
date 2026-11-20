@@ -80,6 +80,10 @@
     onMount(checkStatus);
 </script>
 
+<svelte:head>
+  <title>Setup - Hearth</title>
+</svelte:head>
+
 <div class="setup-container">
     <div class="setup-card">
         <header>

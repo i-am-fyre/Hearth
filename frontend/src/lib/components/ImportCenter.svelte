@@ -1,5 +1,7 @@
 <script lang="ts">
   import { api } from "#lib/api.ts";
+  import { confirmDialog, promptDialog } from "#lib/ui/dialog.svelte.ts";
+  import { notify } from "#lib/ui/notify.svelte.ts";
 
   let { 
     accounts = [], 
@@ -37,33 +39,6 @@
   let bulkAccountId = $state<number | null>(null);
   let filterText = $state("");
 
-  // Custom Confirm Modal State
-  let confirmState = $state<{
-    show: boolean;
-    title: string;
-    message: string;
-    confirmText: string;
-    isDanger: boolean;
-    onConfirm: () => void;
-  }>({
-    show: false,
-    title: "",
-    message: "",
-    confirmText: "Confirm",
-    isDanger: false,
-    onConfirm: () => {}
-  });
-
-  function showConfirm(options: { title: string, message: string, confirmText?: string, isDanger?: boolean, onConfirm: () => void }) {
-    confirmState = {
-      show: true,
-      title: options.title,
-      message: options.message,
-      confirmText: options.confirmText || "Confirm",
-      isDanger: options.isDanger || false,
-      onConfirm: options.onConfirm
-    };
-  }
 
   let filteredResults = $derived(
     results.filter(item => {
@@ -114,47 +89,53 @@
     isProcessing = true;
     try {
       for (const id of Array.from(selectedIds)) {
-        console.log(`Deleting import ${id}`);
         await api.delete(`/imports/${id}`);
       }
       results = results.filter(_t => !selectedIds.has(_t.id));
       selectedIds = new Set();
       if (results.length === 0) step = 'upload';
-      console.log("bulkDiscard success");
       onimported();
     } catch (e: any) {
       console.error("bulkDiscard error", e);
-      alert(`Failed to discard some transactions: ${e.message}`);
+      notify.error(`Failed to discard some transactions: ${e.message}`);
     } finally {
       isProcessing = false;
     }
   }
 
-  function bulkDiscard() {
+  async function bulkDiscard() {
     const count = selectedIds.size;
-    showConfirm({
+    const ok = await confirmDialog({
       title: `Discard ${count} Transactions?`,
-      message: `Are you sure you want to discard these ${count} selected transactions? They will be removed from your feed.`,
+      message: `Discard these ${count} selected transactions? They will be removed from your feed.`,
       confirmText: "Discard",
-      isDanger: true,
-      onConfirm: () => {
-        confirmState.show = false;
-        performBulkDiscard();
-      }
+      danger: true,
     });
+    if (ok) await performBulkDiscard();
   }
 
   async function createQuickRule(txn: any) {
     const targetAccountId = recons[txn.id];
     if (!targetAccountId) {
-      alert("Please select a category for this transaction first so we know where to assign it.");
+      notify.info("Please select a category for this transaction first so we know where to assign it.");
       return;
     }
 
-    const merchant = prompt("Enter merchant name or keyword for this rule:", txn.description);
+    const merchant = (await promptDialog({
+      title: "Create Rule",
+      message: "Bank transactions whose description contains this text will be assigned to the same category.",
+      defaultValue: txn.description,
+      confirmText: "Next",
+    }))?.trim();
     if (!merchant) return;
 
-    const autoPost = confirm(`Should we automatically post transactions matching "${merchant}" to the ledger in the future? (Bypasses manual review)`);
+    // Either answer creates the rule; this only decides whether matches skip review.
+    const autoPost = await confirmDialog({
+      title: "Post Automatically?",
+      message: `Post future transactions matching "${merchant}" straight to the ledger, skipping manual review?`,
+      confirmText: "Auto-Post",
+      cancelText: "Suggest Only",
+    });
 
     isProcessing = true;
     try {
@@ -165,7 +146,7 @@
         active: true,
         auto_post: autoPost
       });
-      alert(`Rule created! ${autoPost ? 'Auto-posting is enabled.' : 'Future matches will be suggested automatically.'}`);
+      notify.success(`Rule created. ${autoPost ? 'Matching transactions will be posted automatically.' : 'Future matches will be suggested for review.'}`);
       
       // Update other transactions in the current feed that match
       results.forEach(_t => {
@@ -174,7 +155,7 @@
         }
       });
     } catch (e: any) {
-      alert(`Failed to create rule: ${e.message}`);
+      notify.error(`Failed to create rule: ${e.message}`);
     } finally {
       isProcessing = false;
     }
@@ -199,7 +180,7 @@
         amountMode = 'split';
       }
     } catch (e: any) {
-      alert(`Failed to preview CSV: ${e.message}`);
+      notify.error(`Failed to preview CSV: ${e.message}`);
     } finally {
       isProcessing = false;
     }
@@ -237,7 +218,7 @@
       
       step = 'review';
     } catch (e: any) {
-      alert(`Import failed: ${e.message}`);
+      notify.error(`Import failed: ${e.message}`);
     } finally {
       isProcessing = false;
     }
@@ -245,7 +226,7 @@
 
   async function postToLedger() {
     if (!sourceAccountId) {
-      alert("Please select the bank account where these funds came from.");
+      notify.info("Please select the bank account where these funds came from.");
       return;
     }
 
@@ -265,10 +246,10 @@
         });
         count++;
       }
-      alert(`Successfully posted ${count} transactions to ledger.`);
+      notify.success(`Successfully posted ${count} transactions to ledger.`);
       finish();
     } catch (e: any) {
-      alert(`Failed to post: ${e.message}`);
+      notify.error(`Failed to post: ${e.message}`);
     } finally {
       isProcessing = false;
     }
@@ -291,7 +272,7 @@
       showInlineAddAccount = false;
       inlineAccountName = "";
     } catch (e: any) {
-      alert(`Failed to create account: ${e.message}`);
+      notify.error(`Failed to create account: ${e.message}`);
     } finally {
       isProcessing = false;
     }
@@ -307,53 +288,45 @@
       }
       onimported();
     } catch (e: any) {
-      alert(`Failed to discard: ${e.message}`);
+      notify.error(`Failed to discard: ${e.message}`);
     } finally {
       isProcessing = false;
     }
   }
 
-  function discardTransaction(txnId: number) {
-    showConfirm({
+  async function discardTransaction(txnId: number) {
+    const ok = await confirmDialog({
       title: "Discard Transaction?",
-      message: "Are you sure you want to discard this bank transaction? It will be removed from your feed.",
+      message: "Discard this bank transaction? It will be removed from your feed.",
       confirmText: "Discard",
-      isDanger: true,
-      onConfirm: () => {
-        confirmState.show = false;
-        performDiscardTransaction(txnId);
-      }
+      danger: true,
     });
+    if (ok) await performDiscardTransaction(txnId);
   }
 
   async function performDiscardAllTransactions() {
     isProcessing = true;
     try {
-      console.log("Calling bulk delete API...");
       await api.delete("/imports/bulk");
       results = [];
       step = 'upload';
-      console.log("discardAllTransactions success");
       onimported();
     } catch (e: any) {
       console.error("discardAllTransactions error", e);
-      alert(`Failed to discard all: ${e.message}`);
+      notify.error(`Failed to discard all: ${e.message}`);
     } finally {
       isProcessing = false;
     }
   }
 
-  function discardAllTransactions() {
-    showConfirm({
+  async function discardAllTransactions() {
+    const ok = await confirmDialog({
       title: "Discard All Unreconciled?",
-      message: "Are you sure you want to discard ALL unreconciled bank transactions? This cannot be undone.",
+      message: "Discard ALL unreconciled bank transactions? This can't be undone.",
       confirmText: "Discard All",
-      isDanger: true,
-      onConfirm: () => {
-        confirmState.show = false;
-        performDiscardAllTransactions();
-      }
+      danger: true,
     });
+    if (ok) await performDiscardAllTransactions();
   }
 
   // Fetch existing unmatched on open if not already in a flow
@@ -798,44 +771,6 @@
   </div>
 {/if}
 
-{#if confirmState.show}
-  <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm shadow-2xl p-8 space-y-6">
-      <header class="text-center">
-        {#if confirmState.isDanger}
-          <div class="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-          </div>
-        {:else}
-          <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-          </div>
-        {/if}
-        <h3 class="text-2xl font-bold text-white">{confirmState.title}</h3>
-        <p class="text-sm text-slate-400 mt-2">{confirmState.message}</p>
-      </header>
-
-      <footer class="flex flex-col gap-3 pt-4">
-        <button 
-          onclick={confirmState.onConfirm}
-          class="w-full px-6 py-3 {confirmState.isDanger ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-900/20' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/20'} text-white font-bold rounded-2xl shadow-lg transition-all"
-        >
-          {confirmState.confirmText}
-        </button>
-        <button 
-          onclick={() => confirmState.show = false}
-          class="w-full px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl transition-all"
-        >
-          Cancel
-        </button>
-      </footer>
-    </div>
-  </div>
-{/if}
 
 <style>
     .custom-scrollbar::-webkit-scrollbar {

@@ -2,6 +2,9 @@
   import { onMount } from "svelte";
   import { api } from "#lib/api.ts";
   import Navbar from "#lib/components/Navbar.svelte";
+  import { CURRENCIES, preferences } from "#lib/preferences.svelte.ts";
+  import { confirmDialog } from "#lib/ui/dialog.svelte.ts";
+  import { notify } from "#lib/ui/notify.svelte.ts";
 
   interface Account {
     id: number;
@@ -15,13 +18,17 @@
   let loading = $state(true);
   let showAddAccount = $state(false);
   let showEditAccount = $state(false);
-  let showDeleteConfirm = $state(false);
   let editingAccount = $state<Account | null>(null);
-  let accountToDelete = $state<Account | null>(null);
 
   // Form state
   let newAccountName = $state("");
   let newAccountType = $state("expense");
+  let newAccountCurrency = $state(preferences.defaultCurrency);
+
+  // Each time the New Account form opens, start from the preferred currency.
+  $effect(() => {
+    if (showAddAccount) newAccountCurrency = preferences.defaultCurrency;
+  });
   let editAccountName = $state("");
   let editAccountType = $state("");
 
@@ -34,7 +41,7 @@
     try {
       accounts = await api.get("/accounts/");
     } catch (e: any) {
-      alert(`Failed to load accounts: ${e.message}`);
+      notify.error(`Failed to load accounts: ${e.message}`);
     } finally {
       loading = false;
     }
@@ -46,22 +53,18 @@
       await api.post("/accounts/", {
         name: newAccountName,
         type: newAccountType,
-        currency: "CAD"
+        currency: newAccountCurrency
       });
       newAccountName = "";
       showAddAccount = false;
       await fetchAccounts();
     } catch (e: any) {
-      alert(`Failed to create account: ${e.message}`);
+      notify.error(`Failed to create account: ${e.message}`);
     }
   }
 
   async function handleUpdateAccount() {
-    console.log("handleUpdateAccount called", { editingAccount, editAccountName, editAccountType });
-    if (!editingAccount || !editAccountName) {
-        console.warn("Update skipped: missing editingAccount or editAccountName");
-        return;
-    }
+    if (!editingAccount || !editAccountName) return;
     try {
       await api.put(`/accounts/${editingAccount.id}`, {
         name: editAccountName,
@@ -71,20 +74,24 @@
       editingAccount = null;
       await fetchAccounts();
     } catch (e: any) {
-      console.error("Update failed", e);
-      alert(`Failed to update account: ${e.message}`);
+      notify.error(`Failed to update account: ${e.message}`);
     }
   }
 
-  async function handleDeleteAccount() {
-    if (!accountToDelete) return;
+  async function handleDeleteAccount(account: Account) {
+    const ok = await confirmDialog({
+      title: "Delete Account?",
+      message: `Delete "${account.name}"? This only works if the account has no transactions.`,
+      confirmText: "Delete Account",
+      danger: true,
+    });
+    if (!ok) return;
     try {
-      await api.delete(`/accounts/${accountToDelete.id}`);
-      showDeleteConfirm = false;
-      accountToDelete = null;
+      await api.delete(`/accounts/${account.id}`);
+      notify.success(`Deleted "${account.name}".`);
       await fetchAccounts();
     } catch (e: any) {
-      alert(`Failed to delete account: ${e.message}`);
+      notify.error(`Failed to delete account: ${e.message}`);
     }
   }
 
@@ -95,10 +102,6 @@
     showEditAccount = true;
   }
 
-  function openDelete(account: Account) {
-    accountToDelete = account;
-    showDeleteConfirm = true;
-  }
 </script>
 
 <svelte:head>
@@ -107,8 +110,8 @@
 
 <Navbar />
 
-<div class="min-h-screen bg-slate-950 text-slate-200 p-8">
-  <div class="max-w-6xl mx-auto space-y-8">
+<div class="text-slate-200">
+  <div class="max-w-6xl mx-auto p-6 space-y-8">
     <header class="flex justify-between items-end">
       <div>
         <h1 class="text-4xl font-black tracking-tighter text-white">Accounts <span class="text-blue-500">.</span></h1>
@@ -144,7 +147,7 @@
                 </svg>
               </button>
               <button 
-                onclick={() => openDelete(account)}
+                onclick={() => handleDeleteAccount(account)}
                 class="p-2 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-xl transition-all"
                 title="Delete Account"
               >
@@ -214,6 +217,19 @@
             <option value="expense">Expense (Spending Category)</option>
             <option value="income">Income (Earnings Source)</option>
             <option value="equity">Equity</option>
+          </select>
+        </div>
+
+        <div class="space-y-2">
+          <label for="newAccountCurrency" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Currency</label>
+          <select
+            id="newAccountCurrency"
+            bind:value={newAccountCurrency}
+            class="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-sm outline-none focus:border-blue-500 text-white transition-all"
+          >
+            {#each CURRENCIES as c}
+              <option value={c.code}>{c.label}</option>
+            {/each}
           </select>
         </div>
       </div>
@@ -292,43 +308,5 @@
   </div>
 {/if}
 
-<!-- Delete Confirmation Modal -->
-{#if showDeleteConfirm}
-  <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm shadow-2xl p-8 space-y-6">
-      <header class="text-center">
-        <div class="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-        </div>
-        <h3 class="text-2xl font-bold text-white">Delete Account?</h3>
-        <p class="text-sm text-slate-400 mt-2">
-            Are you sure you want to delete <span class="text-white font-bold">{accountToDelete?.name}</span>? 
-            This action can only be performed if there are no transactions.
-        </p>
-      </header>
 
-      <footer class="flex flex-col gap-3 pt-4">
-        <button 
-          onclick={handleDeleteAccount}
-          class="w-full px-6 py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-2xl shadow-lg shadow-rose-900/20 transition-all"
-        >
-          Yes, Delete Account
-        </button>
-        <button 
-          onclick={() => { showDeleteConfirm = false; accountToDelete = null; }}
-          class="w-full px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl transition-all"
-        >
-          Cancel
-        </button>
-      </footer>
-    </div>
-  </div>
-{/if}
 
-<style>
-  :global(body) {
-    background-color: #020617;
-  }
-</style>
