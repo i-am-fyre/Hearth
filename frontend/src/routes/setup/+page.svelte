@@ -1,7 +1,8 @@
 <script>
     import { onMount } from 'svelte';
+    import { BASE_URL } from '#lib/api.ts';
     
-    let status = { database_connected: false, is_writable: false };
+    let status = { setup_mode: true, database_connected: false, is_writable: true };
     let dbUrl = "postgresql://hearth:postgres@localhost:5432/hearth";
     let message = "";
     let error = "";
@@ -11,7 +12,7 @@
 
     async function checkStatus() {
         try {
-            const res = await fetch('/api/v1/setup/status');
+            const res = await fetch(`${BASE_URL}/setup/status`);
             status = await res.json();
         } catch (e) {
             console.error(e);
@@ -23,7 +24,7 @@
         error = "";
         message = "";
         try {
-            const res = await fetch('/api/v1/setup/test-db', {
+            const res = await fetch(`${BASE_URL}/setup/test-db`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ database_url: dbUrl })
@@ -46,7 +47,7 @@
         error = "";
         message = "";
         try {
-            const res = await fetch('/api/v1/setup/save-config', {
+            const res = await fetch(`${BASE_URL}/setup/save-config`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ database_url: dbUrl })
@@ -69,7 +70,7 @@
 
     async function restartApp() {
         try {
-            await fetch('/api/v1/setup/restart', { method: 'POST' });
+            await fetch(`${BASE_URL}/setup/restart`, { method: 'POST' });
             message = "Restarting... Please refresh in 5-10 seconds.";
         } catch (e) {
             console.error(e);
@@ -79,6 +80,10 @@
     onMount(checkStatus);
 </script>
 
+<svelte:head>
+  <title>Setup - Hearth</title>
+</svelte:head>
+
 <div class="setup-container">
     <div class="setup-card">
         <header>
@@ -87,7 +92,14 @@
             <p>It looks like we need to finish setting up your database connection.</p>
         </header>
 
-        {#if success}
+        {#if status.setup_mode === false}
+            <div class="success-view">
+                <div class="icon-check">✓</div>
+                <h2>Hearth is already set up</h2>
+                <p>The database is connected, so the setup wizard is turned off.</p>
+                <button on:click={() => window.location.href = '/login'}>Go to Login</button>
+            </div>
+        {:else if success}
             <div class="success-view">
                 <div class="icon-check">✓</div>
                 <h2>Configuration Saved!</h2>
@@ -183,6 +195,7 @@
         font-weight: 800;
         background: linear-gradient(135deg, #60a5fa, #c084fc);
         -webkit-background-clip: text;
+        background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 1rem;
     }

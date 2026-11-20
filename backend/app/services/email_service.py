@@ -1,3 +1,4 @@
+import html
 import logging
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from app.core.config import settings
@@ -22,18 +23,24 @@ async def send_invite_email(email_to: EmailStr, household_name: str, inviter_ema
         logger.warning(f"SMTP not configured. Skipping email to {email_to}")
         return
         
-    html = f"""
+    inviter = html.escape(str(inviter_email))
+    household = html.escape(household_name)
+    to = html.escape(str(email_to))
+    login_url = f"{settings.FRONTEND_URL}/login"
+    body = f"""
     <h3>You have been invited to Hearth!</h3>
-    <p><b>{inviter_email}</b> has invited you to join their household: <b>{household_name}</b>.</p>
-    <p>Please register for an account using this email address ({email_to}) to accept the invitation.</p>
-    <p><a href="{settings.FRONTEND_URL}/register" style="display: inline-block; padding: 10px 20px; background-color: #3b82f6; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Join Household & Register</a></p>
-    <p><small>If the button doesn't work, copy and paste this link: {settings.FRONTEND_URL}/register</small></p>
+    <p><b>{inviter}</b> has invited you to join their household: <b>{household}</b>.</p>
+    <p>Sign in with this email address ({to}), or create an account with it, then open
+    <b>Settings</b> (the gear icon) to accept the invitation. Members of a household can
+    see each other's accounts and transactions.</p>
+    <p><a href="{login_url}" style="display: inline-block; padding: 10px 20px; background-color: #3b82f6; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Open Hearth</a></p>
+    <p><small>If the button doesn't work, copy and paste this link: {login_url}</small></p>
     """
     
     message = MessageSchema(
         subject="Invitation to join Hearth",
         recipients=[email_to],
-        body=html,
+        body=body,
         subtype=MessageType.html
     )
 
@@ -49,7 +56,7 @@ async def send_password_reset_email(email_to: EmailStr, token: str):
         return
         
     reset_link = f"{settings.FRONTEND_URL}/login/reset?token={token}"
-    html = f"""
+    body = f"""
     <h3>Password Reset Request</h3>
     <p>We received a request to reset the password for your Hearth account.</p>
     <p>If you made this request, click the button below to choose a new password. This link is only valid for 1 hour.</p>
@@ -63,7 +70,7 @@ async def send_password_reset_email(email_to: EmailStr, token: str):
     message = MessageSchema(
         subject="Hearth Password Reset",
         recipients=[email_to],
-        body=html,
+        body=body,
         subtype=MessageType.html
     )
 

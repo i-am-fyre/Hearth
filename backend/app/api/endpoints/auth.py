@@ -7,7 +7,6 @@ from app.core import security
 from app.core.config import settings
 from app.schemas.user import UserCreate, UserResponse, Token, UserForgotPassword, UserResetPassword
 from app.services import user_service
-from app.services.household_service import process_pending_invitations
 from app.api.deps import CurrentUser
 from app.services.email_service import send_password_reset_email
 from datetime import datetime, timezone
@@ -28,8 +27,8 @@ def register(user_in: UserCreate, db: SessionDep) -> Any:
                 detail="The user with this username already exists in the system.",
             )
         user = user_service.create_user(db, user_in)
-        # Process any pending household invitations for this user's email
-        process_pending_invitations(db, user)
+        # Household invitations for this email stay pending until the user
+        # accepts them in Settings; joining shares their financial data.
         return user
     except HTTPException:
         raise

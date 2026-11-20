@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 from app.models.household import Household, HouseholdMember, Role, HouseholdInvitation
 from app.models.user import User
-from app.schemas.household import HouseholdCreate, HouseholdMemberCreate
 from typing import List
 
 def get_user_household(db: Session, user_id: int):
@@ -35,29 +34,35 @@ def create_initial_household(db: Session, user_id: int, name: str = "My Househol
     db.refresh(hm)
     return h
 
-def invite_member(db: Session, household_id: int, invite_in: HouseholdMemberCreate):
-    # Find user by email
-    user = db.query(User).filter(User.email == invite_in.email).first()
-    if not user:
-        raise Exception("User not found")
-        
-    hm = db.query(HouseholdMember).filter(HouseholdMember.household_id == household_id, HouseholdMember.user_id == user.id).first()
-    if hm:
-        # Already member, update role
-        hm.role = invite_in.role
-        db.commit()
-        db.refresh(hm)
-        return hm
+def get_membership(db: Session, household_id: int, user_id: int) -> HouseholdMember | None:
+    return db.query(HouseholdMember).filter(
+        HouseholdMember.household_id == household_id, HouseholdMember.user_id == user_id
+    ).first()
 
-    hm = HouseholdMember(
-        household_id=household_id,
-        user_id=user.id,
-        role=invite_in.role
-    )
-    db.add(hm)
-    db.commit()
-    db.refresh(hm)
-    return hm
+
+def owner_count(db: Session, household_id: int) -> int:
+    return db.query(HouseholdMember).filter(
+        HouseholdMember.household_id == household_id, HouseholdMember.role == Role.owner
+    ).count()
+
+
+def invite_to_household(db: Session, household_id: int, email: str, role: Role) -> str:
+    """Invite someone by email. Nobody joins a household without accepting.
+
+    Household members see each other's accounts and transactions, so an existing
+    user is never added directly. Returns "role_updated" if they are already a
+    member (their role is changed), otherwise "invited".
+    """
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        hm = get_membership(db, household_id, user.id)
+        if hm:
+            hm.role = role
+            db.commit()
+            return "role_updated"
+    create_invitation(db, household_id, email, role)
+    return "invited"
+
 
 def remove_member(db: Session, household_id: int, user_id: int):
     hm = db.query(HouseholdMember).filter(HouseholdMember.household_id == household_id, HouseholdMember.user_id == user_id).first()
@@ -103,15 +108,42 @@ def create_invitation(db: Session, household_id: int, email: str, role: Role):
     db.refresh(inv)
     return inv
 
-def process_pending_invitations(db: Session, user: User):
-    invs = db.query(HouseholdInvitation).filter(HouseholdInvitation.email == user.email).all()
-    for inv in invs:
-        # Check if already member
-        hm = db.query(HouseholdMember).filter(HouseholdMember.household_id == inv.household_id, HouseholdMember.user_id == user.id).first()
-        if not hm:
-            hm = HouseholdMember(household_id=inv.household_id, user_id=user.id, role=inv.role)
-            db.add(hm)
-        db.delete(inv)
+def get_invitations_for_email(db: Session, email: str) -> list[dict]:
+    """Pending invitations addressed to this email, with the household's name."""
+    rows = (
+        db.query(HouseholdInvitation, Household.name)
+        .join(Household, Household.id == HouseholdInvitation.household_id)
+        .filter(HouseholdInvitation.email == email)
+        .all()
+    )
+    # Every household starts out named "My Household", so also say whose it is.
+    # Only owners can invite, so an owner is who the invitation came from.
+    def owner_email(household_id: int) -> str | None:
+        row = (
+            db.query(User.email)
+            .join(HouseholdMember, HouseholdMember.user_id == User.id)
+            .filter(HouseholdMember.household_id == household_id, HouseholdMember.role == Role.owner)
+            .order_by(HouseholdMember.id)
+            .first()
+        )
+        return row[0] if row else None
+
+    return [
+        {
+            "id": inv.id,
+            "household_id": inv.household_id,
+            "household_name": name,
+            "owner_email": owner_email(inv.household_id),
+            "role": inv.role,
+        }
+        for inv, name in rows
+    ]
+
+
+def accept_invitation(db: Session, inv: HouseholdInvitation, user: User) -> None:
+    if not get_membership(db, inv.household_id, user.id):
+        db.add(HouseholdMember(household_id=inv.household_id, user_id=user.id, role=inv.role))
+    db.delete(inv)
     db.commit()
 
 

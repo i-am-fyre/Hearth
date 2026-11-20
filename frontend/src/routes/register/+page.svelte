@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api } from '$lib/api';
+  import { api } from '#lib/api.ts';
   import { goto } from '$app/navigation';
 
   let email = '';
@@ -27,6 +27,10 @@
     }
   }
 </script>
+
+<svelte:head>
+  <title>Create Account - Hearth</title>
+</svelte:head>
 
 <div class="flex flex-col items-center justify-center min-h-[80vh] px-4">
   <div class="w-full max-w-md p-8 bg-slate-900 rounded-2xl shadow-2xl border border-slate-800">

@@ -43,6 +43,8 @@ class TransactionResponse(TransactionBase):
     user_id: int
     entries: List[EntryResponse]
     tags: List[TagResponse] = Field(default_factory=list)
+    # False when the signed-in user has read-only access to this item.
+    can_edit: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 

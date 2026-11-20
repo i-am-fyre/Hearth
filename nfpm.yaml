@@ -8,7 +8,7 @@ maintainer: "i-am-fyre <support@hearth.app>"
 description: "Hearth - Modern Personal Finance Manager"
 vendor: "i-am-fyre"
 homepage: "https://github.com/i-am-fyre/Hearth"
-license: "MIT"
+license: "GPL-3.0"
 
 contents:
   - src: "backend/dist/hearth"

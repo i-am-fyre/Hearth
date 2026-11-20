@@ -1,8 +1,10 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { request } from '$lib/api';
+    import { request } from '#lib/api.ts';
     import { Tag as TagIcon, Plus, Trash2, Edit2, Check, X } from 'lucide-svelte';
-    import Navbar from '$lib/components/Navbar.svelte';
+    import Navbar from '#lib/components/Navbar.svelte';
+    import { confirmDialog } from '#lib/ui/dialog.svelte.ts';
+    import { notify } from '#lib/ui/notify.svelte.ts';
 
     type AppTag = {
         id: number;
@@ -25,7 +27,7 @@
         loading = true;
         error = null;
         try {
-            tags = await request<AppTag[]>('/tags');
+            tags = await request<AppTag[]>('/tags/');
         } catch (e: any) {
             error = e.message;
         } finally {
@@ -49,7 +51,7 @@
                 });
                 tags = tags.map(t => t.id === editingId ? updated : t);
             } else {
-                const created = await request<AppTag>('/tags', {
+                const created = await request<AppTag>('/tags/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: tagName, color_hex: tagColor })
@@ -58,18 +60,24 @@
             }
             resetForm();
         } catch (e: any) {
-            alert(e.message);
+            notify.error(`Failed to save tag: ${e.message}`);
         }
     }
 
     async function deleteTag(id: number) {
-        if (!confirm('Are you sure you want to delete this tag? It will be removed from all associated transactions and entries.')) return;
-        
+        const ok = await confirmDialog({
+            title: 'Delete Tag?',
+            message: 'It will be removed from all associated transactions and entries.',
+            confirmText: 'Delete Tag',
+            danger: true,
+        });
+        if (!ok) return;
+
         try {
             await request(`/tags/${id}`, { method: 'DELETE' });
             tags = tags.filter(t => t.id !== id);
         } catch (e: any) {
-            alert(e.message);
+            notify.error(`Failed to delete tag: ${e.message}`);
         }
     }
 
@@ -94,8 +102,8 @@
 
 <Navbar />
 
-<div class="p-8">
-<div class="max-w-4xl mx-auto space-y-6">
+<div>
+<div class="max-w-6xl mx-auto p-6 space-y-6">
     <div class="flex justify-between items-center bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg">
         <div>
             <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-3">
@@ -213,12 +221,14 @@
                         <button 
                             class="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded-lg transition-colors"
                             onclick={() => editTag(tag)}
+                            aria-label="Edit {tag.name}"
                         >
                             <Edit2 class="h-4 w-4" />
                         </button>
                         <button 
                             class="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
                             onclick={() => deleteTag(tag.id)}
+                            aria-label="Delete {tag.name}"
                         >
                             <Trash2 class="h-4 w-4" />
                         </button>

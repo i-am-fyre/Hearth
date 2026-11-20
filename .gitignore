@@ -1,6 +1,9 @@
 # Environment & Secrets
 .env
 *.env.*
+!.env.example
+.secret_key
+hearth.conf.local
 
 # Python
 __pycache__/

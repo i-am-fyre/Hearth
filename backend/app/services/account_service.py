@@ -5,6 +5,7 @@ from app.models.account import Account, AccountType
 from app.models.transaction import Entry
 from app.schemas.account import AccountCreate, AccountUpdate
 from app.services.household_service import get_household_user_ids
+from app.services.access import ensure_can_write, mark_editable, writable_user_ids
 
 def create_account(db: Session, account_in: AccountCreate, user_id: int) -> Account:
     db_account = Account(
@@ -39,15 +40,16 @@ def get_accounts(db: Session, user_id: int) -> list[Account]:
         else:
             # Balance = Credits - Debits for Liabilities, Income, and Equity
             account.balance = credits - debits
-            
-    return accounts
+
+    return mark_editable(accounts, writable_user_ids(db, user_id))
 
 def update_account(db: Session, account_id: int, account_in: AccountUpdate, user_id: int) -> Account:
     user_ids = get_household_user_ids(db, user_id)
     db_account = db.query(Account).filter(Account.id == account_id, Account.user_id.in_(user_ids)).first()
     if not db_account:
         return None
-    
+    ensure_can_write(db, user_id, db_account.user_id)
+
     update_data = account_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_account, field, value)
@@ -62,6 +64,7 @@ def delete_account(db: Session, account_id: int, user_id: int) -> bool:
     db_account = db.query(Account).filter(Account.id == account_id, Account.user_id.in_(user_ids)).first()
     if not db_account:
         return False
+    ensure_can_write(db, user_id, db_account.user_id)
     
     # Check if there are entries associated with this account
     has_entries = db.query(Entry).filter(Entry.account_id == account_id).first() is not None

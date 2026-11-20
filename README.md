@@ -25,8 +25,8 @@
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | SvelteKit 5 (Svelte Runes), TypeScript, Tailwind CSS |
-| Backend | FastAPI (Python 3.11+), SQLAlchemy 2.0, Alembic |
+| Frontend | SvelteKit 3, Svelte 5 (Runes), TypeScript, Tailwind CSS 4, Vite 8 |
+| Backend | FastAPI (Python 3.11+), SQLAlchemy 2.1, Alembic, psycopg 3 |
 | Database | PostgreSQL 15 |
 | AI / OCR | Google Gemini API, Tesseract OCR |
 | Storage | Encrypted files on disk (AES via `cryptography`) |
@@ -39,6 +39,7 @@
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- [Node.js](https://nodejs.org/) 22.17 or newer (24 LTS recommended) for the frontend
 - (Optional) A [Google Gemini API key](https://aistudio.google.com/) for AI receipt parsing
 
 ### 1. Clone the repository
@@ -48,18 +49,15 @@ git clone https://github.com/i-am-fyre/hearth.git
 cd hearth
 ```
 
-### 2. Configure environment variables
+### 2. Configure environment variables (optional)
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-Open `backend/.env` and fill in your values. At minimum, **change the `SECRET_KEY`**:
-
-```bash
-# Generate a secure key:
-python -c "import secrets; print(secrets.token_hex(32))"
-```
+Everything in `backend/.env` is optional for local development. If you don't set a
+`SECRET_KEY`, the backend generates a random one on first start and saves it to
+`backend/.secret_key`.
 
 ### 3. Start the services
 
@@ -86,6 +84,30 @@ npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+### Running the tests
+
+The backend tests need a PostgreSQL database whose name contains `test` (the tests
+wipe it). With the Docker Compose database running:
+
+```bash
+docker compose exec db createdb -U hearth hearth_test
+cd backend
+pip install -r requirements-dev.txt
+TEST_DATABASE_URL=postgresql://hearth:postgres@localhost:5433/hearth_test pytest
+```
+
+Frontend type checks: `cd frontend && npm run check`.
+
+### Updating backend dependencies
+
+`backend/requirements.in` lists the direct dependencies; `requirements.txt` pins every
+package so builds are repeatable. To update, run from `backend/`:
+
+```bash
+uv pip compile requirements.in --universal --python-version 3.11 -o requirements.txt --upgrade
+uv pip compile requirements-dev.in --universal --python-version 3.11 -o requirements-dev.txt --upgrade
+```
 
 ---
 
@@ -120,7 +142,7 @@ See [`backend/.env.example`](backend/.env.example) for a full list. Key variable
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `SECRET_KEY` | ✅ | JWT signing key — **must be changed in production** |
+| `SECRET_KEY` | Optional | JWT signing key. Generated and saved automatically if unset |
 | `POSTGRES_PASSWORD` | ✅ | PostgreSQL password |
 | `GEMINI_API_KEY` | Optional | Enables AI receipt parsing (falls back to Tesseract) |
 | `SMTP_*` | Optional | Email settings for household invites |

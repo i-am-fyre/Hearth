@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 import httpx
-import os
 import time
+from pathlib import Path
 from app.core.config import settings
 
 router = APIRouter()
@@ -14,20 +14,31 @@ cache = {
 
 CACHE_TTL = 3600 * 12 # 12 hours
 
-def get_current_version():
-    try:
-        if os.path.exists(settings.VERSION_FILE):
-            with open(settings.VERSION_FILE, "r") as f:
-                return f.read().strip()
-        else:
-            # Fallback for development if /app/VERSION is not mapped
-            local_path = os.path.join(os.getcwd(), "VERSION")
-            if os.path.exists(local_path):
-                 with open(local_path, "r") as f:
-                    return f.read().strip()
-        return "unknown"
-    except Exception:
-        return "unknown"
+_HERE = Path(__file__).resolve()
+
+
+def _version_file_candidates() -> list[Path]:
+    return [
+        # Explicit setting; docker-compose mounts the repo's VERSION at /app/VERSION.
+        Path(settings.VERSION_FILE),
+        # Next to the app package: /app in the Docker image, and the bundle root in
+        # the packaged binary (scripts/build_backend_binary.sh bundles VERSION there).
+        _HERE.parents[3] / "VERSION",
+        # Repository root, when running from a source checkout.
+        _HERE.parents[4] / "VERSION",
+    ]
+
+
+def get_current_version() -> str:
+    """The installed version (e.g. "v0.1.10"), or "unknown"."""
+    for path in _version_file_candidates():
+        try:
+            version = path.read_text().strip()
+        except OSError:
+            continue
+        if version:
+            return version
+    return "unknown"
 
 async def fetch_latest_github_version():
     """Fetch latest release tag from GitHub."""
@@ -56,20 +67,30 @@ async def fetch_latest_github_version():
     
     return "unknown"
 
+def parse_version(version: str) -> tuple[int, ...] | None:
+    """Turn 'v0.1.10' into (0, 1, 10) so versions compare numerically, not as text."""
+    parts = version.strip().lstrip("vV").split(".")
+    try:
+        return tuple(int(p) for p in parts)
+    except ValueError:
+        return None
+
+
+def is_newer_version(latest: str, current: str) -> bool:
+    latest_v, current_v = parse_version(latest), parse_version(current)
+    if latest_v is None or current_v is None:
+        return False
+    return latest_v > current_v
+
+
 @router.get("/info")
 async def get_system_info():
     current = get_current_version()
     latest = await fetch_latest_github_version()
-    
-    update_available = False
-    if current != "unknown" and latest != "unknown":
-        # Simple string comparison (works for v0.1.0 vs v0.2.0)
-        # Note: In production you might want a more robust semver comparison
-        update_available = latest > current
 
     return {
         "version": current,
         "latest_version": latest,
-        "update_available": update_available,
-        "github_url": f"https://github.com/{{settings.GITHUB_OWNER}}/{{settings.GITHUB_REPO}}"
+        "update_available": is_newer_version(latest, current),
+        "github_url": f"https://github.com/{settings.GITHUB_OWNER}/{settings.GITHUB_REPO}"
     }

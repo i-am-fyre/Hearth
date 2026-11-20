@@ -10,17 +10,21 @@ All configuration is loaded from `backend/.env` at startup. The Docker Compose s
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SECRET_KEY` | JWT signing key — **must be changed in production** | insecure default |
+| `SECRET_KEY` | JWT signing key | generated on first start |
+| `SECRET_KEY_FILE` | Where a generated key is saved | `/var/lib/hearth/secret_key` (packaged install) or `backend/.secret_key` |
 | `POSTGRES_USER` | PostgreSQL username | `hearth` |
 | `POSTGRES_PASSWORD` | PostgreSQL password | `postgres` |
 | `POSTGRES_DB` | PostgreSQL database name | `hearth` |
 | `DATABASE_URL` | Full SQLAlchemy connection string | built from above |
 
-> [!WARNING]
-> You **must** set a strong, unique `SECRET_KEY` in production. Generate one with:
+> [!NOTE]
+> If `SECRET_KEY` is unset (or still the old `your-super-secret-key-change-it-in-production`
+> placeholder), Hearth generates a random key on first start and saves it to `SECRET_KEY_FILE`,
+> readable only by the Hearth user. To use your own key instead, generate one with:
 > ```bash
 > python -c "import secrets; print(secrets.token_hex(32))"
 > ```
+> Changing the key signs everyone out. It does not affect encrypted receipts.
 
 ### Email / SMTP (Optional)
 
@@ -46,9 +50,11 @@ Email is used for household invitation links. Leave blank to disable.
 
 ## Frontend Configuration
 
-For local development, ensure the frontend proxy in `vite.config.ts` points to the backend. No additional `.env` file is required for standard local development.
+No frontend configuration is needed. The dev server (`npm run dev`) talks to the backend at
+`http://localhost:8000/api/v1`, and production builds served by the backend use the same
+origin (`/api/v1`).
 
-If deploying separately, create `frontend/.env`:
+If you host the frontend separately from the backend, create `frontend/.env` before building:
 
 ```env
 VITE_API_URL=http://your-backend-host:8000/api/v1

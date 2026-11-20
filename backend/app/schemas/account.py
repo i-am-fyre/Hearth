@@ -20,5 +20,7 @@ class AccountResponse(AccountBase):
     id: int
     user_id: int
     balance: Decimal = Decimal("0.00")
+    # False when the signed-in user has read-only access to this item.
+    can_edit: bool = True
 
     model_config = ConfigDict(from_attributes=True)

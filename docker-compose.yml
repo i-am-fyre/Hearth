@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   db:
     image: postgres:15-alpine
@@ -17,9 +15,11 @@ services:
       context: ./backend
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-hearth}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-hearth}
-      - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-it-in-production}
+    # SECRET_KEY: set it in backend/.env, or leave it unset and the backend
+    # generates one into backend/.secret_key on first start.
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
     ports:
       - "8000:8000"
     volumes:
