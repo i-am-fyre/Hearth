@@ -56,20 +56,30 @@ async def fetch_latest_github_version():
     
     return "unknown"
 
+def parse_version(version: str) -> tuple[int, ...] | None:
+    """Turn 'v0.1.10' into (0, 1, 10) so versions compare numerically, not as text."""
+    parts = version.strip().lstrip("vV").split(".")
+    try:
+        return tuple(int(p) for p in parts)
+    except ValueError:
+        return None
+
+
+def is_newer_version(latest: str, current: str) -> bool:
+    latest_v, current_v = parse_version(latest), parse_version(current)
+    if latest_v is None or current_v is None:
+        return False
+    return latest_v > current_v
+
+
 @router.get("/info")
 async def get_system_info():
     current = get_current_version()
     latest = await fetch_latest_github_version()
-    
-    update_available = False
-    if current != "unknown" and latest != "unknown":
-        # Simple string comparison (works for v0.1.0 vs v0.2.0)
-        # Note: In production you might want a more robust semver comparison
-        update_available = latest > current
 
     return {
         "version": current,
         "latest_version": latest,
-        "update_available": update_available,
-        "github_url": f"https://github.com/{{settings.GITHUB_OWNER}}/{{settings.GITHUB_REPO}}"
+        "update_available": is_newer_version(latest, current),
+        "github_url": f"https://github.com/{settings.GITHUB_OWNER}/{settings.GITHUB_REPO}"
     }
