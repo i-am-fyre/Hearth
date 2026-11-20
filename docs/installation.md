@@ -8,8 +8,8 @@ Before starting, ensure that your system has the following installed:
 
 1. **[Docker Engine](https://docs.docker.com/engine/install/)**
 2. **[Docker Compose](https://docs.docker.com/compose/install/)**
-3. **[Node.js](https://nodejs.org/)** (v18 or higher) for local frontend development.
-4. **[Python](https://www.python.org/)** (v3.10 or higher) for local backend development.
+3. **[Node.js](https://nodejs.org/)** (v22.17 or higher; v24 LTS recommended) for local frontend development.
+4. **[Python](https://www.python.org/)** (v3.11 or higher) for local backend development.
 
 ---
 
@@ -22,20 +22,14 @@ cd hearth
 
 ## Step 2: Configure Environment Variables
 
-Copy the example environment file and fill in your values:
+Optionally, copy the example environment file and fill in your values:
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-At minimum, **change the `SECRET_KEY`** before running:
-
-```bash
-# Generate a secure random key:
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-See [Configuration](configuration.md) for all available variables.
+Every value is optional for local development. If `SECRET_KEY` is not set, the backend
+generates one on first start. See [Configuration](configuration.md) for all available variables.
 
 ---
 

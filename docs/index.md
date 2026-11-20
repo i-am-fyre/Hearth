@@ -1,6 +1,6 @@
 # Welcome to Hearth
 
-Hearth is a modern, open-source personal finance application built with **FastAPI** (Python) and **SvelteKit** (Wait, let's keep it abstract in case user changes it, or we know it's FastAPI and SvelteKit).
+Hearth is a modern, open-source personal finance application built with **FastAPI** (Python) and **SvelteKit**.
 
 This documentation provides everything you need to know about setting up, configuring, and using Hearth. The content is organized to be **fully searchable**, **expandable**, and **very user-friendly**.
 
