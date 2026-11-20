@@ -17,26 +17,43 @@ if os.path.exists(FRONTEND_PATH):
     
     fastapi_app.mount("/", StaticFiles(directory=FRONTEND_PATH, html=True), name="static")
     
+    from fastapi.responses import JSONResponse
+
     @fastapi_app.exception_handler(404)
     async def spa_fallback(request, exc):
+        # Unknown API paths get a real 404; handing them the SPA's HTML makes
+        # the frontend fail with a confusing JSON parse error instead.
+        if request.url.path.startswith(settings.API_V1_STR):
+            return JSONResponse({"detail": getattr(exc, "detail", "Not Found")}, status_code=404)
         return FileResponse(os.path.join(FRONTEND_PATH, "index.html"))
 
 # Database Initialization
 def init_db():
-    from app.db.database import Base, engine
-    import app.models  # Import models to register them with Base
+    from app.db.database import engine
+    from app.db.migrations import upgrade_database
     import sqlalchemy
-    
-    print(f"Checking database connection: {settings.DATABASE_URL.split('@')[-1]}...")
+
+    print(f"Checking database connection: {settings.DATABASE_URL.split('@')[-1]}...", flush=True)
     try:
-        # Create tables if they don't exist
-        Base.metadata.create_all(bind=engine)
-        print("Database schema verified/initialized successfully.")
-        fastapi_app.state.setup_mode = False
+        with engine.connect() as conn:
+            conn.execute(sqlalchemy.text("SELECT 1"))
     except Exception as e:
-        print(f"CRITICAL: Failed to initialize database: {e}")
+        # No usable database yet: serve the Setup Wizard instead of exiting.
+        print(f"CRITICAL: Cannot connect to the database: {e}", flush=True)
         fastapi_app.state.setup_mode = True
-        # We don't exit here as the app will serve the Setup Wizard
+        return
+
+    try:
+        upgrade_database(engine)
+    except Exception as e:
+        # The database is reachable but its schema couldn't be updated. Stop rather
+        # than run against a half-migrated schema (or reopen the setup wizard on a
+        # configured server); systemd will retry and the error is in the journal.
+        print(f"CRITICAL: Database migration failed: {e}", flush=True)
+        raise SystemExit(1)
+
+    print("Database schema is up to date.", flush=True)
+    fastapi_app.state.setup_mode = False
 
 if __name__ == "__main__":
     init_db()

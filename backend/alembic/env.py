@@ -37,14 +37,29 @@ def run_migrations_offline() -> None:
     with context.begin_transaction():
         context.run_migrations()
 
+def _run_with(connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata)
+    with context.begin_transaction():
+        context.run_migrations()
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
+    # The app's startup code (app.db.migrations) passes in its own connection.
+    connection = config.attributes.get("connection")
+    if connection is not None:
+        _run_with(connection)
+        return
+
     # We will override the sqlalchemy.url dynamically if provided
-    import os
     from app.core.config import settings
-    
-    # Update config from settings to connect properly when running inside docker
-    config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))
+    from app.db.url import normalize_database_url
+
+    # Update config from settings to connect properly when running inside docker.
+    # Escape '%' because Alembic's config goes through configparser interpolation,
+    # which would otherwise choke on URL-encoded passwords.
+    url = normalize_database_url(str(settings.DATABASE_URL))
+    config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
 
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -53,12 +68,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
-
-        with context.begin_transaction():
-            context.run_migrations()
+        _run_with(connection)
 
 if context.is_offline_mode():
     run_migrations_offline()
