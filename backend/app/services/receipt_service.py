@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from app.models.receipt import Receipt
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.services.access import ensure_can_write, readable_user_ids
 from app.services.crypto_service import encrypt_data, decrypt_data
 import hashlib
 from app.db.database import SessionLocal
@@ -196,9 +197,14 @@ def read_decrypted_receipt(receipt: Receipt, user: User) -> bytes:
     return decrypt_data(encrypted_content, user.encryption_key)
 
 def attach_to_transaction(db: Session, receipt: Receipt, transaction_id: int, user_id: int) -> Receipt:
-    transaction = db.query(Transaction).filter(Transaction.id == transaction_id, Transaction.user_id == user_id).first()
+    # Your own receipt can go on any transaction you're allowed to change, including
+    # other household members' (unless you have read-only access).
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id, Transaction.user_id.in_(readable_user_ids(db, user_id))
+    ).first()
     if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found or does not belong to user")
+        raise HTTPException(status_code=404, detail="Transaction not found or not in your household")
+    ensure_can_write(db, user_id, transaction.user_id)
         
     # Bi-directional link
     receipt.transaction_id = transaction.id

@@ -26,6 +26,9 @@ class BudgetCreate(BudgetBase):
 
 class BudgetResponse(BudgetBase):
     id: int
+    user_id: int
     lines: List[BudgetLineResponse] = []
+    # False when the signed-in user has read-only access to this item.
+    can_edit: bool = True
 
     model_config = ConfigDict(from_attributes=True)

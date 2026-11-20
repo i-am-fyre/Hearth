@@ -4,36 +4,51 @@ Hearth supports a multi-user **Household** system, allowing multiple individuals
 
 ## Core Concepts
 
-A **Household** is a group of users who share access to a subset of financial data or live under a single "financial roof."
+A **Household** is a group of users who share access to a subset of financial data or live under a single "financial roof." Everyone in a household can see and edit each other's accounts and transactions, which is why nobody joins a household without accepting an invitation.
 
 ### Household Roles
 
-There are three primary roles within a household:
+There are three roles within a household:
 
 | Role | Permissions |
 |------|-------------|
-| `owner` | Full management of the household, including renaming and inviting/removing members. |
-| `member` | Standard access to household data and shared accounts. |
-| `read_only` | Can view transactions and reports but cannot create or modify data. |
+| `owner` | Everything a member can do, plus inviting people, changing roles, removing members, and cancelling invitations. |
+| `member` | Can view and change the household's accounts, transactions and budgets. Can leave the household. |
+| `read_only` | Can view the household's accounts, transactions and budgets, but can only change their own. |
+
+Read-only members see a **View only** label instead of edit and delete buttons on other
+members' accounts, transactions and budgets, and can only post transactions (or reconcile
+bank imports) between their own accounts. They can still create budgets and suggestion-only
+rules that refer to shared accounts, since those only read them.
 
 ## Managing Your Household
 
+Household settings live in **Settings** (the gear icon in the header), available on every page.
+
 ### Creating a Household
-By default, the first time you access the household settings, Hearth automatically initializes a household with you as the **Owner**.
+The first time you open Settings, Hearth automatically creates a household with you as its **Owner**.
 
 ### Inviting Members
-You can invite members to your household via their email address.
-- **Active Members**: If the user already has an Hearth account, they are added to the household immediately.
-- **Pending Invitations**: If the email is not registered, an invitation is sent. These members appear with a **Pending** status until they create an account.
+Owners can invite people by email address. Every invitation starts as **pending** (shown as
+*Invited*), whether or not the person already has a Hearth account. If email is configured,
+they also receive an email telling them how to accept.
 
-### Registration Auto-Join
-Hearth simplifies onboarding for new users. When an invited person registers using the exact email address from the invitation, they are **automatically joined** to the household and granted the assigned role (Owner, Member, or Read-Only) upon their first login.
+Inviting someone who is already a member changes their role instead.
 
-### Removing Members
-Owners can remove users from the household at any time via the Household Settings pane.
+### Accepting an Invitation
+When someone invites you, an amber dot appears on the gear icon. Open **Settings** to see
+*Invitations for you*, then **Accept** to join (or **Decline**). Invitations sent to an email
+address before it was registered wait in the same place after you sign up.
+
+### Removing Members and Leaving
+- Owners can remove members, and cancel pending invitations, from Settings.
+- Any member can **Leave household** from Settings.
+- A household always keeps at least one owner. To leave as the last owner, first invite
+  another member with the **Owner** role (re-inviting an existing member changes their role).
 
 > [!NOTE]
-> Currently, Hearth accounts are logically tied to the household. Deleting a household member removes their association with the shared accounts, but their individual user history remains in the database.
+> Leaving or being removed stops the sharing in both directions: you no longer see the
+> household's accounts, and they no longer see yours. Your own data stays in your account.
 
 ## Privacy & Security
 

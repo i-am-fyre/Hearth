@@ -4,6 +4,7 @@ from app.api.deps import CurrentUser, SessionDep
 from app.schemas.transaction import TransactionCreate, TransactionResponse, TransactionUpdate
 from app.services import transaction_service
 from app.services.household_service import get_household_user_ids
+from app.services.access import ensure_can_write
 
 router = APIRouter()
 
@@ -51,7 +52,8 @@ def update_transaction(
     ).first()
     if not db_txn:
         raise HTTPException(status_code=404, detail="Transaction not found or not in your household")
-    
+    ensure_can_write(db, current_user.id, db_txn.user_id)
+
     transaction = transaction_service.update_transaction(
         db=db, db_txn=db_txn, transaction_in=transaction_in, user_id=current_user.id
     )
@@ -74,6 +76,7 @@ def delete_transaction(
     ).first()
     if not db_txn:
         raise HTTPException(status_code=404, detail="Transaction not found or not in your household")
-    
+    ensure_can_write(db, current_user.id, db_txn.user_id)
+
     transaction_service.delete_transaction(db=db, db_txn=db_txn)
     return {"status": "success"}

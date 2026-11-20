@@ -7,6 +7,7 @@ from app.models.transaction import Transaction, Entry
 from decimal import Decimal
 from typing import Dict, Any, List
 from app.services.household_service import get_household_user_ids
+from app.services.access import ensure_can_write, mark_editable, writable_user_ids
 from app.schemas.budget import BudgetCreate, BudgetLineCreate
 
 def calculate_budget_variance(db: Session, budget_id: int, user_id: int) -> Dict[str, Any]:
@@ -51,7 +52,8 @@ def calculate_budget_variance(db: Session, budget_id: int, user_id: int) -> Dict
 
 def get_budgets(db: Session, user_id: int) -> List[Budget]:
     user_ids = get_household_user_ids(db, user_id)
-    return db.query(Budget).filter(Budget.user_id.in_(user_ids)).all()
+    budgets = db.query(Budget).filter(Budget.user_id.in_(user_ids)).all()
+    return mark_editable(budgets, writable_user_ids(db, user_id))
 
 def create_budget(db: Session, budget_in: BudgetCreate, user_id: int) -> Budget:
     db_budget = Budget(
@@ -73,8 +75,9 @@ def create_budget_line(db: Session, line_in: BudgetLineCreate, budget_id: int, u
     budget = db.query(Budget).filter(Budget.id == budget_id, Budget.user_id.in_(user_ids)).first()
     if not budget:
         raise HTTPException(status_code=404, detail="Budget not found")
-        
-    # 2. Verify account belongs to household
+    ensure_can_write(db, user_id, budget.user_id)
+
+    # 2. Verify account belongs to household (tracking an account only reads it)
     account = db.query(Account).filter(Account.id == line_in.account_id, Account.user_id.in_(user_ids)).first()
     if not account:
         raise HTTPException(status_code=400, detail="Account not found or not in your household")
@@ -92,7 +95,9 @@ def create_budget_line(db: Session, line_in: BudgetLineCreate, budget_id: int, u
 def delete_budget(db: Session, budget_id: int, user_id: int):
     user_ids = get_household_user_ids(db, user_id)
     budget = db.query(Budget).filter(Budget.id == budget_id, Budget.user_id.in_(user_ids)).first()
-    if budget:
-        db.delete(budget)
-        db.commit()
+    if not budget:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    ensure_can_write(db, user_id, budget.user_id)
+    db.delete(budget)
+    db.commit()
 

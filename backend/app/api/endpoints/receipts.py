@@ -2,6 +2,7 @@ from fastapi import APIRouter, UploadFile, File, Response, BackgroundTasks
 from typing import Any, List
 from app.api.deps import CurrentUser, SessionDep
 from app.schemas.receipt import ReceiptResponse, ReceiptAttach
+from app.models.receipt import Receipt
 from app.services import receipt_service
 
 router = APIRouter()

@@ -6,6 +6,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from fastapi import UploadFile
 
+from app.services.access import readable_user_ids, writable_accounts
 from app.models.bank_transaction import BankTransaction, MatchStatus
 from app.models.transaction import Transaction, Entry
 from app.models.user import User
@@ -187,13 +188,17 @@ def process_csv_import(db: Session, user: User, file_content: bytes, config: Map
 
             if "assign_account_id" in rule_actions:
                 acc_id = rule_actions["assign_account_id"]
-                bank_txn.suggested_account_id = acc_id
-                acc = db.query(Account).filter(Account.id == acc_id).first()
+                # Only suggest accounts this user can see; a rule naming someone
+                # else's account must not reveal it.
+                acc = db.query(Account).filter(
+                    Account.id == acc_id, Account.user_id.in_(readable_user_ids(db, user.id))
+                ).first()
                 if acc:
+                    bank_txn.suggested_account_id = acc.id
                     bank_txn.suggested_account_name = acc.name
-                
-                # Check for Auto-Post
-                if auto_post and config.source_account_id:
+
+                # Check for Auto-Post (reconcile_transaction checks write access)
+                if acc and auto_post and config.source_account_id:
                     try:
                         # Perform auto-reconciliation
                         # We use the existing function but need to be careful with session management
@@ -230,7 +235,11 @@ def reconcile_transaction(
     
     if not bank_txn:
         raise ValueError("Bank transaction not found")
-        
+
+    # Both accounts must be ones this user may post to. Previously any account ID
+    # in the database was accepted, including other users' accounts.
+    writable_accounts(db, user.id, {source_acc_id, target_acc_id})
+
     # Create the regular Transaction
     new_txn = Transaction(
         user_id=user.id,

@@ -4,8 +4,18 @@ from fastapi import HTTPException
 from app.models.transaction import Transaction, Entry
 from app.models.account import Account
 from app.schemas.transaction import TransactionCreate, TransactionUpdate
+from app.models.receipt import Receipt
 from app.services.household_service import get_household_user_ids
+from app.services.access import mark_editable, writable_accounts, writable_user_ids
 from app.services.tag_service import get_tags_by_ids
+
+def _check_receipt(db: Session, receipt_id: int | None, user_id: int) -> None:
+    """A transaction may only point at one of the user's own receipts."""
+    if receipt_id is None:
+        return
+    if not db.query(Receipt).filter(Receipt.id == receipt_id, Receipt.user_id == user_id).first():
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
 
 def create_transaction(db: Session, transaction_in: TransactionCreate, user_id: int) -> Transaction:
     # 1. Total debits MUST equal total credits.
@@ -20,12 +30,10 @@ def create_transaction(db: Session, transaction_in: TransactionCreate, user_id: 
             detail=f"Transaction unbalanced. Debits: {total_debit}, Credits: {total_credit}, Imbalance: {imbalance}"
         )
 
-    # 2. Verify all accounts belong to the user's household
-    account_ids = {entry.account_id for entry in transaction_in.entries}
-    user_ids = get_household_user_ids(db, user_id)
-    accounts = db.query(Account).filter(Account.id.in_(account_ids), Account.user_id.in_(user_ids)).all()
-    if len(accounts) != len(account_ids):
-        raise HTTPException(status_code=400, detail="One or more accounts not found or do not belong to you or your household.")
+    # 2. Every account must be in the household and writable by this user
+    #    (read-only members can't post to other members' accounts).
+    writable_accounts(db, user_id, {entry.account_id for entry in transaction_in.entries})
+    _check_receipt(db, transaction_in.receipt_id, user_id)
 
     # 3. Create Transaction
     db_transaction = Transaction(
@@ -66,9 +74,17 @@ def create_transaction(db: Session, transaction_in: TransactionCreate, user_id: 
 
 def get_transactions(db: Session, user_id: int) -> list[Transaction]:
     user_ids = get_household_user_ids(db, user_id)
-    return db.query(Transaction).filter(Transaction.user_id.in_(user_ids)).all()
+    transactions = db.query(Transaction).filter(Transaction.user_id.in_(user_ids)).all()
+    return mark_editable(transactions, writable_user_ids(db, user_id))
 
 def update_transaction(db: Session, db_txn: Transaction, transaction_in: TransactionUpdate, user_id: int) -> Transaction:
+    # Validate before changing anything. New entries must use accounts this user
+    # may post to; previously any account ID in the database was accepted.
+    if transaction_in.entries is not None:
+        writable_accounts(db, user_id, {entry.account_id for entry in transaction_in.entries})
+    if transaction_in.receipt_id is not None and transaction_in.receipt_id != db_txn.receipt_id:
+        _check_receipt(db, transaction_in.receipt_id, user_id)
+
     update_data = transaction_in.model_dump(exclude_unset=True)
     
     cascade_tags = update_data.pop("cascade_tags_to_entries", False)
@@ -81,8 +97,8 @@ def update_transaction(db: Session, db_txn: Transaction, transaction_in: Transac
             db_txn.tags = []
     
     # Handle entries separately if provided
-    if "entries" in update_data:
-        entries_data = update_data.pop("entries")
+    entries_data = update_data.pop("entries", None)
+    if entries_data is not None:
         
         # 1. Total debits MUST equal total credits.
         total_debit = sum(Decimal(str(entry['debit'])) for entry in entries_data)
